@@ -1,9 +1,7 @@
 #!/bin/bash
 set -e
 
-############################################################
-### NEW BLOCK: MODE + VERSION PARSER
-############################################################
+########### MODE + VERSION PARSER
 
 MODE="install"
 RESET_ENV=0
@@ -27,9 +25,7 @@ done
 echo "Mode: $MODE"
 echo "Version: $SMARTFOX_VERSION"
 
-############################################################
-### ORIGINAL BLOCK: START
-############################################################
+########### START
 
 echo "/// SmartFox Installer ///"
 sleep 1
@@ -40,17 +36,13 @@ INSTALL_HOME=$(eval echo "~$INSTALL_USER")
 echo "Installing for user: $INSTALL_USER"
 sleep 1
 
-############################################################
-### NEW BLOCK: GITHUB AUTH (ONE TOKEN FOR CLONE + GHCR)
-############################################################
+######### GITHUB AUTH (ONE TOKEN FOR CLONE + GHCR)
 
 read -p "GitHub Username: " GH_USER
 read -s -p "GitHub Token (repo + read:packages): " GH_TOKEN
 echo ""
 
-############################################################
-### ORIGINAL BLOCK: DOCKER INSTALL
-############################################################
+######### DOCKER INSTALL
 
 echo "Removing cache packages"
 sudo apt remove -y docker.io docker-compose docker-doc podman-docker containerd runc || true
@@ -75,9 +67,8 @@ sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$INSTALL_USER"
 
-############################################################
-### ORIGINAL BLOCK: GIT INSTALL
-############################################################
+##### GIT INSTALL
+
 
 if ! command -v git >/dev/null; then
   echo ""
@@ -85,9 +76,7 @@ if ! command -v git >/dev/null; then
   sudo apt-get install -y git
 fi
 
-############################################################
-### NEW BLOCK: REINSTALL LOGIC
-############################################################
+###### REINSTALL LOGIC
 
 if [[ "$MODE" == "reinstall" ]]; then
   echo "Reinstall mode: stopping containers"
@@ -97,19 +86,17 @@ if [[ "$MODE" == "reinstall" ]]; then
   sudo rm -rf /opt/smartfox
 fi
 
-############################################################
-### ORIGINAL BLOCK: CLONE REPO
-### MODIFIED to support private repo + version
-############################################################
+###### CLONE REPO
+
 
 cd "$INSTALL_HOME"
 
 if [ ! -d smartfox ]; then
   echo ""
   echo "Cloning SmartFox repository"
-  git clone "https://${GH_TOKEN}@github.com/rafaelphayde/smartfox.git"
+  git clone "https://${GH_TOKEN}@github.com/dba-ingenieria/smartfox.git"
   cd smartfox
-  git remote set-url origin https://github.com/rafaelphayde/smartfox.git
+  git remote set-url origin https://github.com/dba-ingenieria/smartfox.git
 else
   cd smartfox
   git fetch
@@ -117,14 +104,11 @@ fi
 
 git checkout "$SMARTFOX_VERSION" || true
 
-############################################################
-### NEW BLOCK: YAML MERGE (ADD MISSING FIELDS ONLY)
-############################################################
+###### YAML MERGE (ADD MISSING FIELDS ONLY)
 
 if [[ "$MODE" == "upgrade" ]]; then
   echo "Merging config YAML files (add missing fields only)"
 
-  # Merge main config directory
   for file in config/*.yml config/*.yaml; do
     [[ -f "$file" ]] || continue
 
@@ -134,17 +118,14 @@ if [[ "$MODE" == "upgrade" ]]; then
 
     if [[ -f "$LIVE" ]]; then
       tmp=$(mktemp)
-      # LIVE wins, DEFAULT only fills missing keys
       yq eval-all 'select(fileIndex==0) *+ select(fileIndex==1)' \
         "$LIVE" "$DEFAULT" > "$tmp"
       sudo mv "$tmp" "$LIVE"
     else
-      # If file doesn't exist yet, copy it
       sudo cp "$DEFAULT" "$LIVE"
     fi
   done
 
-  # Merge web config directory
   for file in web/config/*.yml web/config/*.yaml; do
     [[ -f "$file" ]] || continue
 
@@ -163,9 +144,7 @@ if [[ "$MODE" == "upgrade" ]]; then
   done
 fi
 
-############################################################
-### ORIGINAL BLOCK: SYSTEM FILES INSTALL
-############################################################
+######## SYSTEM FILES INSTALL
 
 loginctl enable-linger "$INSTALL_USER"
 
@@ -189,35 +168,28 @@ fi
 systemctl --user enable pipewire pipewire-pulse wireplumber
 systemctl --user start pipewire pipewire-pulse wireplumber
 
-############################################################
-### ORIGINAL BLOCK: SYSTEM DIRECTORIES
-############################################################
+####### SYSTEM DIRECTORIES
 
 sudo mkdir -p /opt/smartfox /var/lib/smartfox
 sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
 mkdir -p /opt/smartfox/web
 
-############################################################
-### ORIGINAL BLOCK: COPY RUNTIME ARTIFACTS
-############################################################
+######## COPY RUNTIME ARTIFACTS
 
 cp docker-compose.yml /opt/smartfox/
 cp -r config /opt/smartfox/ 2>/dev/null || true
 cp -r web/config /opt/smartfox/web/ 2>/dev/null || true
 cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
 
-############################################################
-### NEW BLOCK: ENV RESET OPTION
-############################################################
+####### ENV RESET OPTION
+
 
 if [[ "$RESET_ENV" == "1" ]]; then
   echo "Resetting .env file"
   sudo rm -f /opt/smartfox/.env
 fi
 
-############################################################
-### ORIGINAL BLOCK: ENV CREATION
-############################################################
+####### ENV CREATION
 
 ENV_FILE="/opt/smartfox/.env"
 
@@ -241,9 +213,7 @@ if [ ! -f "$ENV_FILE" ]; then
   chmod 600 "$ENV_FILE"
 fi
 
-############################################################
-### NEW BLOCK: GHCR LOGIN (SINGLE TOKEN)
-############################################################
+####### GHCR LOGIN
 
 echo ""
 echo "Logging into GHCR"
@@ -251,9 +221,7 @@ echo "$GH_TOKEN" | sudo docker login ghcr.io -u "$GH_USER" --password-stdin
 
 unset GH_TOKEN
 
-############################################################
-### NEW BLOCK: VERSION-AWARE DOCKER PULL
-############################################################
+####### VERSION-DOCKER PULL
 
 cd /opt/smartfox
 
@@ -265,9 +233,7 @@ sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
 echo "Starting SmartFox"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
 
-############################################################
-### ORIGINAL BLOCK: END MESSAGE
-############################################################
+######## END MESSAGE
 
 echo ""
 echo "/// Installation Complete ///"
