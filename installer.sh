@@ -38,9 +38,13 @@ sleep 1
 
 ######### GITHUB AUTH (ONE TOKEN FOR CLONE + GHCR)
 
-read -p "GitHub Username: " GH_USER
-read -s -p "GitHub Token (repo + read:packages): " GH_TOKEN
-echo ""
+if [[ -z "${GH_USER:-}" ]]; then
+  read -p "GitHub Username: " GH_USER
+fi
+if [[ -z "${GH_TOKEN:-}" ]]; then
+  read -s -p "GitHub Token: " GH_TOKEN
+  echo ""
+fi
 
 ######### DOCKER INSTALL
 
@@ -74,6 +78,11 @@ if ! command -v git >/dev/null; then
   echo ""
   echo "Installing Git"
   sudo apt-get install -y git
+  if ! command -v yq >/dev/null; then
+    echo "Installing yq"
+    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 -o /usr/local/bin/yq
+    sudo chmod +x /usr/local/bin/yq
+  fi
 fi
 
 ###### REINSTALL LOGIC
@@ -177,9 +186,11 @@ mkdir -p /opt/smartfox/web
 ######## COPY RUNTIME ARTIFACTS
 
 cp docker-compose.yml /opt/smartfox/
-cp -r config /opt/smartfox/ 2>/dev/null || true
-cp -r web/config /opt/smartfox/web/ 2>/dev/null || true
 cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
+if [[ "$MODE" == "install" || "$MODE" == "reinstall" ]]; then
+  cp -r config /opt/smartfox/ 2>/dev/null || true
+  cp -r web/config /opt/smartfox/web/ 2>/dev/null || true
+fi
 
 ####### ENV RESET OPTION
 
@@ -202,7 +213,7 @@ if [ ! -f "$ENV_FILE" ]; then
   read -s -p "Dropbox Token: " DROPBOX_TOKEN; echo
   read -s -p "Cloudflare Token: " TUNNEL_TOKEN; echo
   read -s -p "API Crypt Key: " CRYPT_KEY; echo
-  read -s -p "AUDIOCTL_TOKEN: " AUDIOCTL_TOKEN; echo
+  read -s -p "AudioCTL Token: " AUDIOCTL_TOKEN; echo
 
   sed -i "s|^XIMILAR_TOKEN=.*|XIMILAR_TOKEN=$XIMILAR_TOKEN|" "$ENV_FILE"
   sed -i "s|^DROPBOX_TOKEN=.*|DROPBOX_TOKEN=$DROPBOX_TOKEN|" "$ENV_FILE"
