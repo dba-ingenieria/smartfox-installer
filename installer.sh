@@ -219,19 +219,32 @@ ENV_FILE="/opt/smartfox/.env"
 if [ ! -f "$ENV_FILE" ]; then
   echo ""
   echo "Creating environment configuration"
+  echo "Inputs are hidden for security"
   cp .env.template "$ENV_FILE"
 
-  read -s -p "Ximilar Token: " XIMILAR_TOKEN; echo
-  read -s -p "Dropbox Token: " DROPBOX_TOKEN; echo
-  read -s -p "Cloudflare Token: " TUNNEL_TOKEN; echo
-  read -s -p "API Crypt Key: " CRYPT_KEY; echo
-  read -s -p "AudioCTL Token: " AUDIOCTL_TOKEN; echo
-
-  sed -i "s|^XIMILAR_TOKEN=.*|XIMILAR_TOKEN=$XIMILAR_TOKEN|" "$ENV_FILE"
-  sed -i "s|^DROPBOX_TOKEN=.*|DROPBOX_TOKEN=$DROPBOX_TOKEN|" "$ENV_FILE"
+  read -s -p "Cloudflare Token (e.g. eYJh...): " TUNNEL_TOKEN
+  echo
   sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=$TUNNEL_TOKEN|" "$ENV_FILE"
-  sed -i "s|^CRYPT_KEY=.*|CRYPT_KEY=$CRYPT_KEY|" "$ENV_FILE"
-  sed -i "s|^AUDIOCTL_TOKEN=.*|AUDIOCTL_TOKEN=$AUDIOCTL_TOKEN|" "$ENV_FILE"
+
+  if grep -q "^XIMILAR_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
+    read -s -p "Ximilar Token: " XIMILAR_TOKEN; echo
+    sed -i "s|^XIMILAR_TOKEN=.*|XIMILAR_TOKEN=$XIMILAR_TOKEN|" "$ENV_FILE"
+  fi
+
+  if grep -q "^DROPBOX_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
+    read -s -p "Dropbox Token: " DROPBOX_TOKEN; echo
+    sed -i "s|^DROPBOX_TOKEN=.*|DROPBOX_TOKEN=$DROPBOX_TOKEN|" "$ENV_FILE"
+  fi
+
+  if grep -q "^CRYPT_KEY=PLACEHOLDER" "$ENV_FILE"; then
+    read -s -p "API Crypt Key: " CRYPT_KEY; echo
+    sed -i "s|^CRYPT_KEY=.*|CRYPT_KEY=$CRYPT_KEY|" "$ENV_FILE"
+  fi
+
+  if grep -q "^AUDIOCTL_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
+    read -s -p "AudioCTL Token: " AUDIOCTL_TOKEN; echo
+    sed -i "s|^AUDIOCTL_TOKEN=.*|AUDIOCTL_TOKEN=$AUDIOCTL_TOKEN|" "$ENV_FILE"
+  fi
 
   chmod 600 "$ENV_FILE"
 fi
