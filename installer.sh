@@ -55,6 +55,7 @@ sudo apt -y install ca-certificates curl
 
 echo ""
 echo "Installing Docker"
+sleep 1
 sudo install -m 0755 -d /etc/apt/keyrings
 sudo curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 sudo chmod a+r /etc/apt/keyrings/docker.asc
@@ -73,16 +74,17 @@ sudo usermod -aG docker "$INSTALL_USER"
 
 ##### GIT INSTALL
 
-
 if ! command -v git >/dev/null; then
   echo ""
   echo "Installing Git"
+  sleep 1
   sudo apt-get install -y git
-  if ! command -v yq >/dev/null; then
-    echo "Installing yq"
-    sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 -o /usr/local/bin/yq
-    sudo chmod +x /usr/local/bin/yq
-  fi
+fi
+
+if ! command -v yq >/dev/null; then
+  echo "Installing yq tool"
+  sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 -o /usr/local/bin/yq
+  sudo chmod +x /usr/local/bin/yq
 fi
 
 ###### REINSTALL LOGIC
@@ -114,6 +116,7 @@ cd "$INSTALL_HOME"
 if [ ! -d smartfox ]; then
   echo ""
   echo "Cloning SmartFox repository"
+  sleep 1
   GIT_ASKPASS="$ASKPASS" GH_USER="$GH_USER" GH_TOKEN="$GH_TOKEN" \
     git -c core.askPass="$ASKPASS" -c credential.helper= clone https://github.com/dba-ingenieria/smartfox.git
   cd smartfox
@@ -123,27 +126,18 @@ else
     git -c core.askPass="$ASKPASS" -c credential.helper= fetch
 fi
 
-git checkout "$SMARTFOX_VERSION" || true
-
-##### Pull env defaults from repo
-DEFAULTS_URL="https://raw.githubusercontent.com/dba-ingenieria/smartfox/${SMARTFOX_VERSION}/setup/env.defaults"
-TMP_DEFAULTS="$(mktemp)"
-echo "Downloading env defaults from repo"
-sleep 1
-# Download defaults (private repo) using the GH token
-if curl -fsSL -H "Authorization: token ${GH_TOKEN}" "$DEFAULTS_URL" -o "$TMP_DEFAULTS"; then
-  echo "Downloaded env defaults successfully"
+if [[ "$SMARTFOX_VERSION" != "latest" ]]; then
+  git checkout "$SMARTFOX_VERSION"
 else
-  echo "No env defaults found at ${DEFAULTS_URL} (continuing without it)"
-  rm -f "$TMP_DEFAULTS"
-  TMP_DEFAULTS=""
+  git checkout main
+  git pull
 fi
-sleep 1 
 
 ###### YAML MERGE (ADD MISSING FIELDS ONLY)
 
 if [[ "$MODE" == "upgrade" ]]; then
   echo "Merging config YAML files (add missing fields only)"
+  sudo mkdir -p /opt/smartfox/config /opt/smartfox/web/config
 
   for file in config/*.yml config/*.yaml; do
     [[ -f "$file" ]] || continue
@@ -186,6 +180,7 @@ loginctl enable-linger "$INSTALL_USER"
 
 echo ""
 echo "Installing SmartFox system files"
+sleep 1
 
 sudo apt install -y \
   pipewire \
@@ -195,14 +190,8 @@ sudo apt install -y \
   pipewire-jack \
   alsa-utils
 
-if ! command -v yq >/dev/null; then
-  echo "Installing yq"
-  sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_arm64 -o /usr/local/bin/yq
-  sudo chmod +x /usr/local/bin/yq
-fi
-
-systemctl --user enable pipewire pipewire-pulse wireplumber
-systemctl --user start pipewire pipewire-pulse wireplumber
+systemctl enable pipewire pipewire-pulse wireplumber
+systemctl start pipewire pipewire-pulse wireplumber
 
 ####### SYSTEM DIRECTORIES
 
@@ -231,36 +220,26 @@ fi
 
 ENV_FILE="/opt/smartfox/.env"
 
-ENV_FILE="/opt/smartfox/.env"
-
 if [ ! -f "$ENV_FILE" ]; then
   echo ""
   echo "Creating environment configuration"
   cp .env.template "$ENV_FILE"
 
-  if [[ -n "${TMP_DEFAULTS:-}" && -f "$TMP_DEFAULTS" ]]; then
-    while IFS='=' read -r k v; do
-      [[ -z "$k" ]] && continue
-      [[ "$k" =~ ^# ]] && continue
-      if grep -q "^${k}=PLACEHOLDER" "$ENV_FILE" || grep -q "^${k}=$" "$ENV_FILE"; then
-        sed -i "s|^${k}=.*|${k}=${v}|" "$ENV_FILE"
-      fi
-    done < "$TMP_DEFAULTS"
-    rm -f "$TMP_DEFAULTS"
-  fi
+  read -s -p "Ximilar Token: " XIMILAR_TOKEN; echo
+  read -s -p "Dropbox Token: " DROPBOX_TOKEN; echo
+  read -s -p "Cloudflare Token: " TUNNEL_TOKEN; echo
+  read -s -p "API Crypt Key: " CRYPT_KEY; echo
+  read -s -p "AudioCTL Token: " AUDIOCTL_TOKEN; echo
 
-  read -s -p "Cloudflare Token (e.g. eYJh...): " TUNNEL_TOKEN; echo
+  sed -i "s|^XIMILAR_TOKEN=.*|XIMILAR_TOKEN=$XIMILAR_TOKEN|" "$ENV_FILE"
+  sed -i "s|^DROPBOX_TOKEN=.*|DROPBOX_TOKEN=$DROPBOX_TOKEN|" "$ENV_FILE"
   sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=$TUNNEL_TOKEN|" "$ENV_FILE"
-
-  for key in XIMILAR_TOKEN DROPBOX_TOKEN CRYPT_KEY AUDIOCTL_TOKEN; do
-    if grep -q "^${key}=PLACEHOLDER" "$ENV_FILE"; then
-      read -s -p "${key}: " val; echo
-      sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
-    fi
-  done
+  sed -i "s|^CRYPT_KEY=.*|CRYPT_KEY=$CRYPT_KEY|" "$ENV_FILE"
+  sed -i "s|^AUDIOCTL_TOKEN=.*|AUDIOCTL_TOKEN=$AUDIOCTL_TOKEN|" "$ENV_FILE"
 
   chmod 600 "$ENV_FILE"
 fi
+
 ####### GHCR LOGIN
 
 echo ""
