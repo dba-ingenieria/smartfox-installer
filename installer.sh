@@ -25,6 +25,17 @@ done
 echo "Mode: $MODE"
 echo "Version: $SMARTFOX_VERSION"
 
+GIT_VERSION="$SMARTFOX_VERSION"
+DOCKER_VERSION="$SMARTFOX_VERSION"
+
+if [[ "$GIT_VERSION" != "latest" && "$GIT_VERSION" != v* ]]; then
+  GIT_VERSION="v${GIT_VERSION}"
+fi
+
+if [[ "$DOCKER_VERSION" == v* ]]; then
+  DOCKER_VERSION="${DOCKER_VERSION#v}"
+fi
+
 ########### START
 
 echo "/// SmartFox Installer ///"
@@ -127,7 +138,7 @@ else
 fi
 
 if [[ "$SMARTFOX_VERSION" != "latest" ]]; then
-  git checkout "$SMARTFOX_VERSION"
+  git checkout "$GIT_VERSION"
 else
   git checkout main
   git pull
@@ -252,7 +263,7 @@ unset GH_TOKEN
 
 cd /opt/smartfox
 
-export SMARTFOX_VERSION
+export SMARTFOX_VERSION="$DOCKER_VERSION"
 
 echo "Pulling Docker images"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
