@@ -125,6 +125,21 @@ fi
 
 git checkout "$SMARTFOX_VERSION" || true
 
+##### Pull env defaults from repo
+DEFAULTS_URL="https://raw.githubusercontent.com/dba-ingenieria/smartfox/${SMARTFOX_VERSION}/setup/env.defaults"
+TMP_DEFAULTS="$(mktemp)"
+echo "Downloading env defaults from repo"
+sleep 1
+# Download defaults (private repo) using the GH token
+if curl -fsSL -H "Authorization: token ${GH_TOKEN}" "$DEFAULTS_URL" -o "$TMP_DEFAULTS"; then
+  echo "Downloaded env defaults successfully"
+else
+  echo "No env defaults found at ${DEFAULTS_URL} (continuing without it)"
+  rm -f "$TMP_DEFAULTS"
+  TMP_DEFAULTS=""
+fi
+sleep 1 
+
 ###### YAML MERGE (ADD MISSING FIELDS ONLY)
 
 if [[ "$MODE" == "upgrade" ]]; then
@@ -216,39 +231,36 @@ fi
 
 ENV_FILE="/opt/smartfox/.env"
 
+ENV_FILE="/opt/smartfox/.env"
+
 if [ ! -f "$ENV_FILE" ]; then
   echo ""
   echo "Creating environment configuration"
-  echo "Inputs are hidden for security"
   cp .env.template "$ENV_FILE"
 
-  read -s -p "Cloudflare Token (e.g. eYJh...): " TUNNEL_TOKEN
-  echo
+  if [[ -n "${TMP_DEFAULTS:-}" && -f "$TMP_DEFAULTS" ]]; then
+    while IFS='=' read -r k v; do
+      [[ -z "$k" ]] && continue
+      [[ "$k" =~ ^# ]] && continue
+      if grep -q "^${k}=PLACEHOLDER" "$ENV_FILE" || grep -q "^${k}=$" "$ENV_FILE"; then
+        sed -i "s|^${k}=.*|${k}=${v}|" "$ENV_FILE"
+      fi
+    done < "$TMP_DEFAULTS"
+    rm -f "$TMP_DEFAULTS"
+  fi
+
+  read -s -p "Cloudflare Token (e.g. eYJh...): " TUNNEL_TOKEN; echo
   sed -i "s|^TUNNEL_TOKEN=.*|TUNNEL_TOKEN=$TUNNEL_TOKEN|" "$ENV_FILE"
 
-  if grep -q "^XIMILAR_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
-    read -s -p "Ximilar Token: " XIMILAR_TOKEN; echo
-    sed -i "s|^XIMILAR_TOKEN=.*|XIMILAR_TOKEN=$XIMILAR_TOKEN|" "$ENV_FILE"
-  fi
-
-  if grep -q "^DROPBOX_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
-    read -s -p "Dropbox Token: " DROPBOX_TOKEN; echo
-    sed -i "s|^DROPBOX_TOKEN=.*|DROPBOX_TOKEN=$DROPBOX_TOKEN|" "$ENV_FILE"
-  fi
-
-  if grep -q "^CRYPT_KEY=PLACEHOLDER" "$ENV_FILE"; then
-    read -s -p "API Crypt Key: " CRYPT_KEY; echo
-    sed -i "s|^CRYPT_KEY=.*|CRYPT_KEY=$CRYPT_KEY|" "$ENV_FILE"
-  fi
-
-  if grep -q "^AUDIOCTL_TOKEN=PLACEHOLDER" "$ENV_FILE"; then
-    read -s -p "AudioCTL Token: " AUDIOCTL_TOKEN; echo
-    sed -i "s|^AUDIOCTL_TOKEN=.*|AUDIOCTL_TOKEN=$AUDIOCTL_TOKEN|" "$ENV_FILE"
-  fi
+  for key in XIMILAR_TOKEN DROPBOX_TOKEN CRYPT_KEY AUDIOCTL_TOKEN; do
+    if grep -q "^${key}=PLACEHOLDER" "$ENV_FILE"; then
+      read -s -p "${key}: " val; echo
+      sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+    fi
+  done
 
   chmod 600 "$ENV_FILE"
 fi
-
 ####### GHCR LOGIN
 
 echo ""
