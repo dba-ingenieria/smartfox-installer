@@ -190,8 +190,8 @@ sudo apt install -y \
   pipewire-jack \
   alsa-utils
 
-systemctl enable pipewire pipewire-pulse wireplumber
-systemctl start pipewire pipewire-pulse wireplumber
+systemctl --user enable pipewire pipewire-pulse wireplumber
+systemctl --user start pipewire pipewire-pulse wireplumber
 
 ####### SYSTEM DIRECTORIES
 
