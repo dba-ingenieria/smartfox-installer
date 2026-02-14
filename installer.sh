@@ -97,18 +97,30 @@ fi
 
 ###### CLONE REPO
 
+##### NEW BLOCK: GIT_ASKPASS helper (prevents git prompting twice)
+ASKPASS=$(mktemp)
+cat > "$ASKPASS" <<'EOF'
+#!/bin/sh
+case "$1" in
+  *Username*) echo "$GH_USER" ;;
+  *Password*) echo "$GH_TOKEN" ;;
+esac
+EOF
+chmod +x "$ASKPASS"
+trap 'rm -f "$ASKPASS"' EXIT
 
 cd "$INSTALL_HOME"
 
 if [ ! -d smartfox ]; then
   echo ""
   echo "Cloning SmartFox repository"
-  git clone "https://${GH_TOKEN}@github.com/dba-ingenieria/smartfox.git"
+  GIT_ASKPASS="$ASKPASS" GH_USER="$GH_USER" GH_TOKEN="$GH_TOKEN" \
+    git -c core.askPass="$ASKPASS" -c credential.helper= clone https://github.com/dba-ingenieria/smartfox.git
   cd smartfox
-  git remote set-url origin https://github.com/dba-ingenieria/smartfox.git
 else
   cd smartfox
-  git fetch
+  GIT_ASKPASS="$ASKPASS" GH_USER="$GH_USER" GH_TOKEN="$GH_TOKEN" \
+    git -c core.askPass="$ASKPASS" -c credential.helper= fetch
 fi
 
 git checkout "$SMARTFOX_VERSION" || true
