@@ -337,7 +337,7 @@ fi
 ####### GHCR LOGIN #######
 echo ""
 echo "Logging into GHCR"
-echo "$GH_TOKEN" | sudo docker login ghcr.io -u "$GH_USER" --password-stdin
+printf '%s' "$GH_TOKEN" | sudo docker login ghcr.io -u "$GH_USER" --password-stdin
 unset GH_TOKEN
 
 ####### VERSION-DOCKER PULL #######
