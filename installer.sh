@@ -375,7 +375,7 @@ if [[ "$MODE" == "install" ]]; then
 
   sudo mkdir -p /var/lib/smartfox/logs/internal
 
-  CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
+  CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
 
   sudo crontab -l 2>/dev/null | grep -F "docker compose run --rm maintenance" >/dev/null || \
   ( sudo crontab -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -
