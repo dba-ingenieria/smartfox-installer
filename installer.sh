@@ -6,16 +6,18 @@ set -e
 #
 # Modes:
 #   --install    : one-time host bootstrap + deploy
-#   --update     : pull + deploy new version, always merge configs, always refresh compose
-#   --reinstall  : stop containers and redeploy (NO host deps install), always merge configs, refresh compose
+#   --update     : safe redeploy (containers down first), refresh compose/programs,
+#                 merge config YAML (add missing fields only), pull + start selected version
 #
 # Env flags:
-#   --merge-env  : add missing keys from .env.template into existing /opt/smartfox/.env (does NOT overwrite values)
-#   --reset-env  : delete /opt/smartfox/.env (then it will be recreated only in --install;
-#                 in --update/--reinstall it errors unless you also choose to run --install)
+#   --merge-env  : add missing keys from repo .env.template into /opt/smartfox/.env
+#                 (does NOT overwrite existing values)
+#   --reset-env  : delete /opt/smartfox/.env
+#                 - in --install: it will be recreated interactively
+#                 - in --update : installer will exit and recommend running --install first
 #
 # Version:
-#   --version=latest (default) or --version=v2.0.0-beta.2 or --version=2.0.0-beta.2
+#   --version=latest (default) or --version=v2.0.0-beta.3 or --version=2.0.0-beta.3
 ############################################
 
 ########### MODE + VERSION PARSER ###########
@@ -29,7 +31,6 @@ for arg in "$@"; do
   case "$arg" in
     --install) MODE="install" ;;
     --update) MODE="update" ;;
-    --reinstall) MODE="reinstall" ;;
     --reset-env) RESET_ENV=1 ;;
     --merge-env) MERGE_ENV=1 ;;
     --version=*)
@@ -40,12 +41,12 @@ for arg in "$@"; do
   esac
 done
 
-# Validate mode (only 3 supported)
+# Validate mode (only 2 supported)
 case "$MODE" in
-  install|update|reinstall) ;;
+  install|update) ;;
   *)
     echo "ERROR: Unsupported mode: $MODE"
-    echo "Use: --install | --update | --reinstall"
+    echo "Use: --install | --update"
     exit 1
     ;;
 esac
@@ -151,10 +152,10 @@ EOF
   fi
 fi
 
-###### REINSTALL LOGIC (no deletes, just stop containers) ######
+###### UPDATE LOGIC (safe like reinstall: stop containers first) ######
 
-if [[ "$MODE" == "reinstall" ]]; then
-  echo "Reinstall mode: stopping containers"
+if [[ "$MODE" == "update" ]]; then
+  echo "Update mode: stopping containers"
   if [[ -f /opt/smartfox/docker-compose.yml ]]; then
     (cd /opt/smartfox && sudo docker compose down) || true
   fi
@@ -227,10 +228,12 @@ sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
 mkdir -p /opt/smartfox/web
 
 ######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
+
 cp docker-compose.yml /opt/smartfox/
 cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
 
 ######## CONFIG MANAGEMENT ########
+
 if [[ "$MODE" == "install" ]]; then
   # Seed initial defaults
   cp -r config /opt/smartfox/ 2>/dev/null || true
@@ -275,6 +278,7 @@ else
 fi
 
 ####### ENV OPTIONS (RESET / MERGE) #######
+
 ENV_FILE="/opt/smartfox/.env"
 
 if [[ "$RESET_ENV" == "1" ]]; then
@@ -335,12 +339,14 @@ if [[ "$MERGE_ENV" == "1" ]]; then
 fi
 
 ####### GHCR LOGIN #######
+
 echo ""
 echo "Logging into GHCR"
 printf '%s' "$GH_TOKEN" | sudo docker login ghcr.io -u "$GH_USER" --password-stdin
 unset GH_TOKEN
 
 ####### VERSION-DOCKER PULL #######
+
 cd /opt/smartfox
 export SMARTFOX_VERSION="$DOCKER_VERSION"
 
@@ -350,7 +356,20 @@ sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
 echo "Starting SmartFox"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
 
+
+###### CLEAN FILES CRON JOB
+if [[ "$MODE" == "install" ]]; then
+  echo ""
+  echo "Setting Cleanup (clean_files) Cron Job"
+
+  CRON_CMD="0 0 * * * /bin/bash -c 'cd /opt/smartfox && docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
+
+  ( sudo crontab -l 2>/dev/null | grep -F "docker compose run --rm maintenance" ) >/dev/null || \
+  ( sudo crontab -l 2>/dev/null; echo "$CRON_CMD" ) | sudo crontab -
+fi
+
 ######## END MESSAGE ########
+
 echo "$SMARTFOX_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
 echo ""
 echo "/// Completed ///"
