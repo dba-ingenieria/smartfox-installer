@@ -33,12 +33,11 @@ If no `--version` flag is provided, the latest version will be installed by defa
 > The deployed version is stored in: `/opt/smartfox/.version`
 
 ### Environment Flags (USE WITH CAUTION)
-- `--merge-env`: Adds missing keys from .env.template into the existing /opt/smartfox/.env. Does not overwrite existing values. Useful when new environment variables are introduced in a release
+- `--merge-env`: Adds missing keys from .env.template into the existing /opt/smartfox/.env. Does not overwrite existing values. Useful when new environment variables are introduced in a release.
 
-- `--reset-env`: Deletes /opt/smartfox/.env. In `--install`, it will be recreated interactively In `--update`, the installer will exit and instruct you to run `--install`
+- `--reset-env`: Deletes /opt/smartfox/.env. In `--install`, it will be recreated interactively. In `--update`, the installer will exit and instruct you to run `--install`.
 
 ## Examples of usage
-
 
 * First install:
 
