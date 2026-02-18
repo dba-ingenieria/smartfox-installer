@@ -46,7 +46,7 @@ If no `--version` flag is provided, the latest version will be installed by defa
 
 * Install a specific version:
 
-`bash installer.sh --install --version=v2.0.0-beta.5`
+`bash installer.sh --install --version=v2.0.0-beta.6`
 
 * Update to a specific version:
 
