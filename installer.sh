@@ -252,12 +252,16 @@ else
 
     if [[ -f "$LIVE" ]]; then
       tmp=$(mktemp)
-      
+
       yq eval-all '
         select(fileIndex==0) as $live |
         select(fileIndex==1) as $def |
-        ($def | .. style=""; select(tag != "!!map" and tag != "!!seq") |= "") as $blank |
-        $live *+ $blank
+        (
+          $def
+          | .. style=""
+          | select(tag != "!!map" and tag != "!!seq") |= ""
+        ) as $blank |
+        $live *n $blank
       ' "$LIVE" "$DEFAULT" > "$tmp"
 
       sudo mv "$tmp" "$LIVE"
