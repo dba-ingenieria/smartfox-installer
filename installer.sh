@@ -158,7 +158,7 @@ if [[ "$MODE" == "update" ]]; then
   echo "Update mode: stopping containers"
   if [[ -f /opt/smartfox/docker-compose.yml ]]; then
     (cd /opt/smartfox && sudo docker compose down) || true
-    (cd /var/lib/smartfox && rm -f .monitor_enabled) || true
+    (sudo rm -f /var/lib/smartfox/.monitor_enabled)
   fi
 fi
 
