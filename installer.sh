@@ -216,10 +216,63 @@ if [[ "$MODE" == "install" ]]; then
     wireplumber \
     libspa-0.2-jack \
     pipewire-jack \
-    alsa-utils
+    alsa-utils \
+    tree
 
   systemctl --user enable pipewire pipewire-pulse wireplumber
   systemctl --user start pipewire pipewire-pulse wireplumber
+fi
+
+### Disable camera audio with wireplumber
+configure_wireplumber_camera_disable() {
+
+  CONF_DIR="/etc/wireplumber/wireplumber.conf.d"
+  CONF_FILE="$CONF_DIR/90-disable-camera-audio.conf"
+
+  echo ""
+  echo "Checking WirePlumber camera audio disable rule..."
+
+  sudo mkdir -p "$CONF_DIR"
+
+  if [ ! -f "$CONF_FILE" ]; then
+    echo "Creating camera audio disable rule..."
+
+    sudo tee "$CONF_FILE" > /dev/null <<'EOF'
+monitor.alsa.rules = [
+  {
+    matches = [
+      { device.description = "~.*(Camera|Webcam).*" }
+    ]
+    actions = {
+      update-props = {
+        device.disabled = true
+      }
+    }
+  }
+]
+EOF
+
+    echo "Rule created."
+
+    # Restart WirePlumber only if user service is active
+    if systemctl --user is-active wireplumber >/dev/null 2>&1; then
+      systemctl --user restart wireplumber
+      echo "WirePlumber restarted (user service)."
+    else
+      echo "WirePlumber not active or no user session — will apply on next boot."
+    fi
+
+  else
+    echo "Camera audio disable rule already exists. Skipping."
+  fi
+}
+
+if [ "$MODE" = "--install" ]; then
+  configure_wireplumber_camera_disable
+fi
+
+if [ "$MODE" = "--update" ]; then
+  configure_wireplumber_camera_disable
 fi
 
 ####### SYSTEM DIRECTORIES (ALL MODES) #######
