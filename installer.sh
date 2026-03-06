@@ -241,7 +241,10 @@ configure_wireplumber_camera_disable() {
 monitor.alsa.rules = [
   {
     matches = [
-      { device.description = "~.*(Camera|Webcam).*" }
+      { device.description = "~.*Camera*" }
+      { device.description = "~.*camera*" }
+      { device.description = "~.*Webcam*" }
+      { device.description = "~.*webcam*" }
     ]
     actions = {
       update-props = {
