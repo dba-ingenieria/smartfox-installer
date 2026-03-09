@@ -424,18 +424,13 @@ echo "Starting SmartFox"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
 
 
-###### CLEAN FILES CRON JOB
-if [[ "$MODE" == "install" ]]; then
-  echo ""
-  echo "Setting Cleanup (clean_files) Cron Job"
-
-  sudo mkdir -p /var/lib/smartfox/logs/internal
-
-  CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
-
-  sudo crontab -l 2>/dev/null | grep -F "docker compose run --rm maintenance" >/dev/null || \
-  ( sudo crontab -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -
-fi
+###### CLEAN FILES CRON JOB. 
+### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
+echo ""
+echo "Setting Cleanup (clean_files) Cron Job"
+CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
+sudo crontab -l 2>/dev/null | grep -F "docker compose run --rm maintenance" >/dev/null || \
+( sudo crontab -l 2>/dev/null; echo "$CRON_LINE" ) | sudo crontab -
 
 ######## END MESSAGE ########
 
