@@ -10,6 +10,12 @@ To download this installer into the device run the following command line:
 
 `curl -O https://raw.githubusercontent.com/dba-ingenieria/smartfox-installer/main/installer.sh`
 
+### Download helper tools
+
+To download helper tools such as disable-camera-mic (for Debian 12 Bookworm devices), run the following command line:
+
+`curl -O https://raw.githubusercontent.com/dba-ingenieria/smartfox-installer/main/helpers/disable-camera-mic.sh`
+
 ## Modes
 
 The installer provides two modes:
