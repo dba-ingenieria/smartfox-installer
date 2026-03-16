@@ -270,11 +270,11 @@ EOF
   fi
 }
 
-if [ "$MODE" = "--install" ]; then
+if [ "$MODE" = "install" ]; then
   configure_wireplumber_camera_disable
 fi
 
-if [ "$MODE" = "--update" ]; then
+if [ "$MODE" = "update" ]; then
   configure_wireplumber_camera_disable
 fi
 
