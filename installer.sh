@@ -176,6 +176,10 @@ EOF
 chmod +x "$ASKPASS"
 trap 'rm -f "$ASKPASS"' EXIT
 
+export GIT_ASKPASS
+export GH_USER
+export GH_TOKEN
+
 cd "$INSTALL_HOME"
 
 if [ ! -d smartfox ]; then
@@ -410,7 +414,7 @@ fi
 echo ""
 echo "Logging into GHCR"
 printf '%s' "$GH_TOKEN" | sudo docker login ghcr.io -u "$GH_USER" --password-stdin
-unset GH_TOKEN
+unset GIT_ASKPASS GH_USER GH_TOKEN
 
 ####### VERSION-DOCKER PULL #######
 
@@ -423,6 +427,7 @@ sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
 echo "Starting SmartFox"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
 
+sudo docker logout ghcr.io
 
 ###### CLEAN FILES CRON JOB. 
 ### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
