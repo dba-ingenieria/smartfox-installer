@@ -189,7 +189,7 @@ if [ ! -d smartfox ]; then
   GIT_ASKPASS="$ASKPASS" GH_USER="$GH_USER" GH_TOKEN="$GH_TOKEN" \
     git -c core.askPass="$ASKPASS" -c credential.helper= clone https://github.com/dba-ingenieria/smartfox.git
   cd smartfox
-  git fetch --tags --force --prune
+  git -c core.askPass="$ASKPASS" -c credential.helper= fetch --tags --force --prune
 else
   cd smartfox
   GIT_ASKPASS="$ASKPASS" GH_USER="$GH_USER" GH_TOKEN="$GH_TOKEN" \
@@ -202,7 +202,7 @@ if [[ "$SMARTFOX_VERSION" != "latest" ]]; then
   git checkout "$GIT_VERSION"
 else
   git checkout main
-  git pull
+  git -c core.askPass="$ASKPASS" -c credential.helper= pull
 fi
 
 ######## SYSTEM FILES INSTALL (INSTALL MODE ONLY) ########
