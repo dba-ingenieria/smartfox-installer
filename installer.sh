@@ -174,11 +174,8 @@ case "$1" in
 esac
 EOF
 chmod +x "$ASKPASS"
+export GIT_ASKPASS GH_USER GH_TOKEN
 trap 'rm -f "$ASKPASS"' EXIT
-
-export GIT_ASKPASS
-export GH_USER
-export GH_TOKEN
 
 cd "$INSTALL_HOME"
 
@@ -434,7 +431,9 @@ sudo docker logout ghcr.io
 echo ""
 echo "Setting Cleanup (clean_files) Cron Job"
 CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
-( sudo crontab -l 2>/dev/null | grep -F "docker compose run --rm maintenance" >/dev/null || { sudo crontab -l 2>/dev/null; echo "$CRON_LINE"; }; ) | sudo crontab -
+if ! sudo crontab -l 2>/dev/null | grep -qF "docker compose run --rm maintenance"; then
+    (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -
+fi
 
 ######## END MESSAGE ########
 
