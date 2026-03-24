@@ -299,6 +299,7 @@ if [[ "$MODE" == "install" ]]; then
 else
   echo "Merging config YAML files (add missing fields only)"
   sudo mkdir -p /opt/smartfox/config /opt/smartfox/web/config
+  cp -f config/paths.yml /opt/smartfox/config/ 2>/dev/null || true
 
   for file in config/*.yml config/*.yaml; do
     [[ -f "$file" ]] || continue
