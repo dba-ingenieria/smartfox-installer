@@ -59,7 +59,7 @@ echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV"
 GIT_VERSION="$SMARTFOX_VERSION"
 DOCKER_VERSION="$SMARTFOX_VERSION"
 
-if [[ "$GIT_VERSION" != "latest" && "$GIT_VERSION" != v* ]]; then
+if [[ "$GIT_VERSION" != "latest" && "$GIT_VERSION" != "dev" && "$GIT_VERSION" != v* ]]; then
   GIT_VERSION="v${GIT_VERSION}"
 fi
 
