@@ -197,6 +197,9 @@ if [[ "$SMARTFOX_VERSION" != "latest" ]]; then
   git tag -l | grep -F "$GIT_VERSION" || true
   git rev-parse "$GIT_VERSION" || true
   git checkout "$GIT_VERSION"
+  if git rev-parse --verify "refs/heads/$GIT_VERSION" >/dev/null 2>&1; then
+    git -c core.askPass="$ASKPASS" -c credential.helper= pull
+  fi
 else
   git checkout main
   git -c core.askPass="$ASKPASS" -c credential.helper= pull
