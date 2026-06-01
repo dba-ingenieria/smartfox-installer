@@ -162,6 +162,17 @@ if [[ "$MODE" == "update" ]]; then
   fi
 fi
 
+####### DOCKER WAIT FOR TIME-SYNC NTP
+if [[ "$MODE" == "update" ]]; then
+  sudo mkdir -p /etc/systemd/system/docker.service.d
+  sudo tee /etc/systemd/system/docker.service.d/wait-for-timesync.conf << 'EOF'
+  [Unit]
+  After=time-sync.target
+  Requires=time-sync.target
+EOF
+  sudo systemctl daemon-reload
+fi
+
 ###### CLONE / FETCH REPO (ALL MODES) ######
 
 ##### GIT_ASKPASS helper (prevents git prompting twice)
