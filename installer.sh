@@ -225,6 +225,10 @@ if [[ "$MODE" == "install" ]]; then
 
   systemctl --user enable pipewire pipewire-pulse wireplumber
   systemctl --user start pipewire pipewire-pulse wireplumber
+
+  echo "Enabling persisten boot journal"
+  sudo mkdir -p /var/log/journal
+  sudo systemd-tmpfiles --create --prefix /var/log/journal
 fi
 
 ### Disable camera audio with wireplumber
