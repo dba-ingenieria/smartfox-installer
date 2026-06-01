@@ -163,12 +163,11 @@ if [[ "$MODE" == "update" ]]; then
 fi
 
 ####### DOCKER WAIT FOR TIME-SYNC NTP
-if [[ "$MODE" == "update" ]]; then
+if [[ "$MODE" == "install" ]]; then
   sudo mkdir -p /etc/systemd/system/docker.service.d
   sudo tee /etc/systemd/system/docker.service.d/wait-for-timesync.conf << 'EOF'
   [Unit]
-  After=time-sync.target
-  Requires=time-sync.target
+  After=time-set.target
 EOF
   sudo systemctl daemon-reload
 fi
