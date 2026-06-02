@@ -152,6 +152,27 @@ EOF
   fi
 fi
 
+######### CONFIGURE NTP #############
+echo "Configuring NTP Server"
+FILE="/etc/systemd/timesyncd.conf"
+LINE="NTP=ntp.shoa.cl"
+if ! grep -Fxq "$LINE" "$FILE"; then
+    if grep -q "^\[Time\]" "$FILE"; then
+        awk -v line="$LINE" '
+            /^\[Time\]/ { print; in_time=1; next }
+            in_time && /^[[]/ { print line; in_time=0 }
+            { print }
+            END { if (in_time) print line }
+        ' "$FILE" > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+    else
+        echo -e "\n[Time]\n$LINE" >> "$FILE"
+    fi
+    echo "Added: $LINE"
+else
+    echo "Line already present."
+fi
+systemctl restart systemd-timesyncd
+
 ###### UPDATE LOGIC (safe like reinstall: stop containers first) ######
 
 if [[ "$MODE" == "update" ]]; then
@@ -162,7 +183,7 @@ if [[ "$MODE" == "update" ]]; then
   fi
 fi
 
-####### DOCKER WAIT FOR TIME-SYNC NTP
+####### DOCKER WAIT FOR TIME-SET ############
 if [[ "$MODE" == "install" ]]; then
   sudo mkdir -p /etc/systemd/system/docker.service.d
   sudo tee /etc/systemd/system/docker.service.d/wait-for-timesync.conf << 'EOF'
