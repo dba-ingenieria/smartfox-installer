@@ -190,8 +190,8 @@ fi
 if [[ "$MODE" == "install" ]]; then
   sudo mkdir -p /etc/systemd/system/docker.service.d
   sudo tee /etc/systemd/system/docker.service.d/wait-for-timesync.conf << 'EOF'
-  [Unit]
-  After=time-set.target
+[Unit]
+After=time-set.target
 EOF
   sudo systemctl daemon-reload
 fi
