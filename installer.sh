@@ -164,15 +164,15 @@ if [[ "$MODE" == "install" ]]; then
               in_time && /^[[]/ { print line; in_time=0 }
               { print }
               END { if (in_time) print line }
-          ' "$FILE" > "${FILE}.tmp" && mv "${FILE}.tmp" "$FILE"
+          ' "$FILE" > "${FILE}.tmp" && sudo mv "${FILE}.tmp" "$FILE"
       else
-          echo -e "\n[Time]\n$LINE" >> "$FILE"
+          echo -e "\n[Time]\n$LINE" | sudo tee -a "$FILE" > /dev/null
       fi
       echo "Added: $LINE"
   else
       echo "Line already present."
   fi
-  systemctl restart systemd-timesyncd
+  sudo systemctl restart systemd-timesyncd
 fi
 
 
