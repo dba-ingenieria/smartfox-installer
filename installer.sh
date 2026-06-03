@@ -25,6 +25,7 @@ set -e
 MODE="install"
 RESET_ENV=0
 MERGE_ENV=0
+RESET_CONFIG=0
 SMARTFOX_VERSION="latest"
 
 for arg in "$@"; do
@@ -33,6 +34,7 @@ for arg in "$@"; do
     --update) MODE="update" ;;
     --reset-env) RESET_ENV=1 ;;
     --merge-env) MERGE_ENV=1 ;;
+    --reset-config) RESET_CONFIG=1 ;;
     --version=*)
       SMARTFOX_VERSION="${arg#*=}"
       ;;
@@ -53,7 +55,7 @@ esac
 
 echo "Mode: $MODE"
 echo "Version: $SMARTFOX_VERSION"
-echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV"
+echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV reset-config=$RESET_CONFIG"
 
 # Keep your version parsing behavior
 GIT_VERSION="$SMARTFOX_VERSION"
@@ -331,61 +333,63 @@ mkdir -p /opt/smartfox/web
 cp docker-compose.yml /opt/smartfox/
 cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
 
+####### RESET CONFIG (if requested) #######
+
+if [[ "$RESET_CONFIG" == "1" ]]; then
+  echo "Resetting config files"
+  sudo rm -rf /opt/smartfox/config
+  sudo rm -rf /opt/smartfox/web/config
+fi
+
 ######## CONFIG MANAGEMENT ########
 
-if [[ "$MODE" == "install" ]]; then
-  # Seed initial defaults
-  cp -r config /opt/smartfox/ 2>/dev/null || true
-  cp -r web/config /opt/smartfox/web/ 2>/dev/null || true
-else
-  echo "Merging config YAML files (add missing fields only)"
-  sudo mkdir -p /opt/smartfox/config /opt/smartfox/web/config
-  cp -f config/paths.yml /opt/smartfox/config/ 2>/dev/null || true
+echo "Merging config YAML files (add missing fields only, seed if not present)"
+sudo mkdir -p /opt/smartfox/config /opt/smartfox/web/config
+cp -f config/paths.yml /opt/smartfox/config/ 2>/dev/null || true
 
-  for file in config/*.yml config/*.yaml; do
-    [[ -f "$file" ]] || continue
+for file in config/*.yml config/*.yaml; do
+  [[ -f "$file" ]] || continue
 
-    name=$(basename "$file")
-    LIVE="/opt/smartfox/config/$name"
-    DEFAULT="$PWD/$file"
+  name=$(basename "$file")
+  LIVE="/opt/smartfox/config/$name"
+  DEFAULT="$PWD/$file"
 
-    if [[ -f "$LIVE" ]]; then
-      tmp=$(mktemp)
+  [[ "$name" == "paths.yml" ]] && continue
 
-      yq eval-all '
-        select(fileIndex==0) as $live |
-        select(fileIndex==1) as $def |
-        (
-          $def
-          | .. style=""
-          | select(tag != "!!map" and tag != "!!seq") |= ""
-        ) as $blank |
-        $live *n $blank
-      ' "$LIVE" "$DEFAULT" > "$tmp"
+  if [[ -f "$LIVE" ]]; then
+    tmp=$(mktemp)
+    yq eval-all '
+      select(fileIndex==0) as $live |
+      select(fileIndex==1) as $def |
+      (
+        $def
+        | .. style=""
+        | select(tag != "!!map" and tag != "!!seq") |= ""
+      ) as $blank |
+      $live *n $blank
+    ' "$LIVE" "$DEFAULT" > "$tmp"
+    sudo mv "$tmp" "$LIVE"
+  else
+    sudo cp "$DEFAULT" "$LIVE"
+  fi
+done
 
-      sudo mv "$tmp" "$LIVE"
-    else
-      sudo cp "$DEFAULT" "$LIVE"
-    fi
-  done
+for file in web/config/*.yml web/config/*.yaml; do
+  [[ -f "$file" ]] || continue
 
-  for file in web/config/*.yml web/config/*.yaml; do
-    [[ -f "$file" ]] || continue
+  name=$(basename "$file")
+  LIVE="/opt/smartfox/web/config/$name"
+  DEFAULT="$PWD/$file"
 
-    name=$(basename "$file")
-    LIVE="/opt/smartfox/web/config/$name"
-    DEFAULT="$PWD/$file"
-
-    if [[ -f "$LIVE" ]]; then
-      tmp=$(mktemp)
-      yq eval-all 'select(fileIndex==0) *+ select(fileIndex==1)' \
-        "$LIVE" "$DEFAULT" > "$tmp"
-      sudo mv "$tmp" "$LIVE"
-    else
-      sudo cp "$DEFAULT" "$LIVE"
-    fi
-  done
-fi
+  if [[ -f "$LIVE" ]]; then
+    tmp=$(mktemp)
+    yq eval-all 'select(fileIndex==0) *+ select(fileIndex==1)' \
+      "$LIVE" "$DEFAULT" > "$tmp"
+    sudo mv "$tmp" "$LIVE"
+  else
+    sudo cp "$DEFAULT" "$LIVE"
+  fi
+done
 
 ####### ENV OPTIONS (RESET / MERGE) #######
 
