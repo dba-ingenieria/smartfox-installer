@@ -452,6 +452,12 @@ if [[ "$MERGE_ENV" == "1" ]]; then
   done < .env.template
 fi
 
+####### REMOVE MONITOR AUTO-START ########
+
+echo ""
+echo "Removing monitor auto-start"
+sudo rm -f /var/lib/smartfox/.monitor_enabled
+
 ####### GHCR LOGIN #######
 
 echo ""
