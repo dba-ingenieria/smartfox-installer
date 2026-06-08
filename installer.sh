@@ -391,6 +391,14 @@ for file in web/config/*.yml web/config/*.yaml; do
   fi
 done
 
+# Copy non-YAML config files (seed if not present)
+for file in config/*.txt; do
+  [[ -f "$file" ]] || continue
+  name=$(basename "$file")
+  LIVE="/opt/smartfox/config/$name"
+  [[ -f "$LIVE" ]] || sudo cp "$file" "$LIVE"
+done
+
 ####### ENV OPTIONS (RESET / MERGE) #######
 
 ENV_FILE="/opt/smartfox/.env"
