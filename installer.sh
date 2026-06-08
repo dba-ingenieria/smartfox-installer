@@ -161,12 +161,12 @@ if [[ "$MODE" == "install" ]]; then
   LINE="NTP=ntp.shoa.cl"
   if ! grep -Fxq "$LINE" "$FILE"; then
       if grep -q "^\[Time\]" "$FILE"; then
-          awk -v line="$LINE" '
-              /^\[Time\]/ { print; in_time=1; next }
-              in_time && /^[[]/ { print line; in_time=0 }
-              { print }
-              END { if (in_time) print line }
-          ' "$FILE" > "${FILE}.tmp" && sudo mv "${FILE}.tmp" "$FILE"
+        awk -v line="$LINE" '
+            /^\[Time\]/ { print; in_time=1; next }
+            in_time && /^[[]/ { print line; in_time=0 }
+            { print }
+            END { if (in_time) print line }
+        ' "$FILE" > /tmp/timesyncd.conf.tmp && sudo mv /tmp/timesyncd.conf.tmp "$FILE"
       else
           echo -e "\n[Time]\n$LINE" | sudo tee -a "$FILE" > /dev/null
       fi
