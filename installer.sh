@@ -65,9 +65,9 @@ if [[ "$GIT_VERSION" != "latest" && "$GIT_VERSION" != "dev" && "$GIT_VERSION" !=
   GIT_VERSION="v${GIT_VERSION}"
 fi
 
-if [[ "$DOCKER_VERSION" == v* ]]; then
-  DOCKER_VERSION="${DOCKER_VERSION#v}"
-fi
+#if [[ "$DOCKER_VERSION" == v* ]]; then
+#  DOCKER_VERSION="${DOCKER_VERSION#v}"
+#fi
 
 ########### START ###########
 
