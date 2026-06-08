@@ -241,6 +241,14 @@ else
   git -c core.askPass="$ASKPASS" -c credential.helper= pull
 fi
 
+if [[ "$SMARTFOX_VERSION" == "latest" ]]; then
+  RESOLVED_VERSION=$(sudo docker inspect ghcr.io/dba-ingenieria/smartfox-core:latest \
+    --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "latest")
+else
+  RESOLVED_VERSION="$SMARTFOX_VERSION"
+fi
+echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
+
 ######## SYSTEM FILES INSTALL (INSTALL MODE ONLY) ########
 
 if [[ "$MODE" == "install" ]]; then
@@ -497,7 +505,6 @@ fi
 
 ######## END MESSAGE ########
 
-echo "$SMARTFOX_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
 echo ""
 echo "/// Completed ///"
 echo "Mode: $MODE"
