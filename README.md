@@ -38,6 +38,12 @@ If no `--version` flag is provided, the latest version will be installed by defa
 
 > The deployed version is stored in: `/opt/smartfox/.version`
 
+### Config Flags
+
+- `--reset-config`: Deletes all configured configs before redeployment. Use when you need to discard local config changes and restore a clean baseline. **Destructive — all local config edits will be lost.**
+
+> If omitted, config files are always updated by merging (adding missing fields only, never overwriting existing values).
+
 ### Environment Flags (USE WITH CAUTION)
 - `--merge-env`: Adds missing keys from .env.template into the existing /opt/smartfox/.env. Does not overwrite existing values. Useful when new environment variables are introduced in a release.
 
@@ -56,6 +62,10 @@ If no `--version` flag is provided, the latest version will be installed by defa
 * Update to a specific version:
 
 `bash installer.sh --update --version=v2.0.0-beta.6`
+
+* Reset config files to release defaults:
+
+`bash installer.sh --update --version=v2.0.0-beta.6 --reset-config`
 
 * Update and merge new environment variables:
 
