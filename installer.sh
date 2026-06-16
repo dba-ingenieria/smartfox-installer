@@ -204,11 +204,6 @@ sudo mkdir -p /opt/smartfox /var/lib/smartfox
 sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
 mkdir -p /opt/smartfox/web
 
-######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
-
-cp docker-compose.yml /opt/smartfox/
-cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
-
 ###### CLONE / FETCH REPO (ALL MODES) ######
 
 ##### GIT_ASKPASS helper (prevents git prompting twice)
@@ -259,6 +254,11 @@ else
   RESOLVED_VERSION="$SMARTFOX_VERSION"
 fi
 echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
+
+######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
+
+cp docker-compose.yml /opt/smartfox/
+cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
 
 ######## SYSTEM FILES INSTALL (INSTALL MODE ONLY) ########
 
