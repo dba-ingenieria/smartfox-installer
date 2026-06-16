@@ -198,6 +198,17 @@ EOF
   sudo systemctl daemon-reload
 fi
 
+####### SYSTEM DIRECTORIES (ALL MODES) #######
+
+sudo mkdir -p /opt/smartfox /var/lib/smartfox
+sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
+mkdir -p /opt/smartfox/web
+
+######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
+
+cp docker-compose.yml /opt/smartfox/
+cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
+
 ###### CLONE / FETCH REPO (ALL MODES) ######
 
 ##### GIT_ASKPASS helper (prevents git prompting twice)
@@ -329,17 +340,6 @@ fi
 if [ "$MODE" = "update" ]; then
   configure_wireplumber_camera_disable
 fi
-
-####### SYSTEM DIRECTORIES (ALL MODES) #######
-
-sudo mkdir -p /opt/smartfox /var/lib/smartfox
-sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
-mkdir -p /opt/smartfox/web
-
-######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
-
-cp docker-compose.yml /opt/smartfox/
-cp -r web/programs /opt/smartfox/web/ 2>/dev/null || true
 
 ####### RESET CONFIG (if requested) #######
 
