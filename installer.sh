@@ -551,5 +551,5 @@ fi
 echo ""
 echo "/// Completed ///"
 echo "Mode: $MODE"
-echo "Deployed version: $SMARTFOX_VERSION"
+echo "Deployed version: $RESOLVED_VERSION"
 echo "If this was a fresh install, please reboot the system."
