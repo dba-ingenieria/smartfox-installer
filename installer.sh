@@ -247,14 +247,6 @@ else
   git -c core.askPass="$ASKPASS" -c credential.helper= pull
 fi
 
-if [[ "$SMARTFOX_VERSION" == "latest" ]]; then
-  RESOLVED_VERSION=$(sudo docker inspect ghcr.io/dba-ingenieria/smartfox-core:latest \
-    --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "latest")
-else
-  RESOLVED_VERSION="$SMARTFOX_VERSION"
-fi
-echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
-
 ######## COPY RUNTIME ARTIFACTS (ALL MODES) ########
 
 cp docker-compose.yml /opt/smartfox/
@@ -536,6 +528,14 @@ echo "Starting SmartFox"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
 
 sudo docker logout ghcr.io
+
+if [[ "$SMARTFOX_VERSION" == "latest" ]]; then
+  RESOLVED_VERSION=$(sudo docker inspect ghcr.io/dba-ingenieria/smartfox-core:latest \
+    --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "latest")
+else
+  RESOLVED_VERSION="$SMARTFOX_VERSION"
+fi
+echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
 
 ###### CLEAN FILES CRON JOB. 
 ### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
