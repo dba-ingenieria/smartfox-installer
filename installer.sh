@@ -341,6 +341,49 @@ if [ "$MODE" = "update" ]; then
   configure_wireplumber_camera_disable
 fi
 
+### Setup host reboot trigger (systemd path unit watches for trigger file)
+configure_reboot_trigger() {
+  local trigger_dir="/opt/smartfox/triggers"
+
+  echo ""
+  echo "Checking SmartFox reboot trigger units..."
+
+  sudo mkdir -p "$trigger_dir"
+  sudo rm -f "$trigger_dir/reboot"
+
+  sudo tee /etc/systemd/system/smartfox-reboot.path > /dev/null <<'EOF'
+[Unit]
+Description=Watch for SmartFox reboot trigger
+
+[Path]
+PathExists=/opt/smartfox/triggers/reboot
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo tee /etc/systemd/system/smartfox-reboot.service > /dev/null <<'EOF'
+[Unit]
+Description=SmartFox host reboot
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/rm -f /opt/smartfox/triggers/reboot
+ExecStart=/sbin/reboot
+EOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now smartfox-reboot.path
+  echo "Reboot trigger units installed."
+}
+
+if [ "$MODE" = "install" ]; then
+  configure_reboot_trigger
+fi
+
+if [ "$MODE" = "update" ]; then
+  configure_reboot_trigger
+fi
 ####### RESET CONFIG (if requested) #######
 
 if [[ "$RESET_CONFIG" == "1" ]]; then
