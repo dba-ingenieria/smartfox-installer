@@ -509,6 +509,8 @@ echo ""
 echo "Removing monitor auto-start"
 sudo rm -f /var/lib/smartfox/.monitor_enabled
 
+sudo touch /opt/smartfox/.version
+
 ####### GHCR LOGIN #######
 
 echo ""
