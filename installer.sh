@@ -442,6 +442,9 @@ for file in config/*.txt; do
   [[ -f "$LIVE" ]] || sudo cp "$file" "$LIVE"
 done
 
+# Ensure config dirs/files are owned by the install user, not root
+sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox/config /opt/smartfox/web/config
+
 ####### ENV OPTIONS (RESET / MERGE) #######
 
 ENV_FILE="/opt/smartfox/.env"
