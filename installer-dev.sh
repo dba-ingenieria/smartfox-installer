@@ -523,7 +523,6 @@ fi
 
 echo ""
 echo "Removing monitor auto-start"
-[ -f /app/data/.monitor_enabled ] && mv /app/data/.monitor_enabled /app/data/.smartfox_enabled
 sudo rm -f /var/lib/smartfox/.smartfox_enabled
 
 ####### GHCR LOGIN #######
