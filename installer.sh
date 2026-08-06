@@ -16,6 +16,20 @@ set -e
 #                 - in --install: it will be recreated interactively
 #                 - in --update : installer will exit and recommend running --install first
 #
+# Variant:
+#   --cal        : calibration bench unit. Full host provision and both images are
+#                 pulled at the pinned version, but only web + cloudflared are
+#                 started and the web UI hides the station-operation menus
+#                 (SMARTFOX_VARIANT=cal in /opt/smartfox/.env).
+#                 The variant of EACH run is decided by this flag's presence on
+#                 THAT run:
+#                   --install --cal   : fresh calibration bench
+#                   --update  --cal   : update a bench, staying cal
+#                   --update (no cal) : promote a bench to production (variant=full,
+#                                       all services started; the calibration factor
+#                                       in config/cal_factor.txt is preserved because
+#                                       config/*.txt is seeded only when absent)
+#
 # Version:
 #   --version=latest (default) or --version=v2.0.0-beta.3 or --version=2.0.0-beta.3
 ############################################
@@ -26,6 +40,7 @@ MODE="install"
 RESET_ENV=0
 MERGE_ENV=0
 RESET_CONFIG=0
+CAL_VARIANT=0
 SMARTFOX_VERSION="latest"
 
 for arg in "$@"; do
@@ -35,6 +50,7 @@ for arg in "$@"; do
     --reset-env) RESET_ENV=1 ;;
     --merge-env) MERGE_ENV=1 ;;
     --reset-config) RESET_CONFIG=1 ;;
+    --cal) CAL_VARIANT=1 ;;
     --version=*)
       SMARTFOX_VERSION="${arg#*=}"
       ;;
@@ -55,7 +71,7 @@ esac
 
 echo "Mode: $MODE"
 echo "Version: $SMARTFOX_VERSION"
-echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV reset-config=$RESET_CONFIG"
+echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV reset-config=$RESET_CONFIG cal=$CAL_VARIANT"
 
 # Keep your version parsing behavior
 GIT_VERSION="$SMARTFOX_VERSION"
@@ -528,6 +544,34 @@ else
   echo "SMARTFOX_VERSION=$DOCKER_VERSION" | sudo tee -a "$ENV_FILE" >/dev/null
 fi
 
+####### SET STATION VARIANT (full | cal) #######
+# SMARTFOX_VARIANT reaches the web container via compose `env_file: .env`; the
+# web app treats anything other than "cal" (including absent/empty) as the full
+# UI. The variant of each run is decided by the presence of --cal on THAT run,
+# so `--update` without --cal promotes a calibration bench to a full station.
+# Do NOT add SMARTFOX_VARIANT to the app repo's .env.template — --merge-env
+# would seed it (empty) on every device.
+
+if [[ "$CAL_VARIANT" == "1" ]]; then
+  VARIANT_VALUE="cal"
+else
+  VARIANT_VALUE="full"
+fi
+
+echo ""
+echo "Setting station variant in $ENV_FILE (SMARTFOX_VARIANT=$VARIANT_VALUE)"
+if sudo grep -q '^SMARTFOX_VARIANT=' "$ENV_FILE"; then
+  sudo sed -i "s|^SMARTFOX_VARIANT=.*|SMARTFOX_VARIANT=$VARIANT_VALUE|" "$ENV_FILE"
+else
+  echo "SMARTFOX_VARIANT=$VARIANT_VALUE" | sudo tee -a "$ENV_FILE" >/dev/null
+fi
+
+if [[ "$CAL_VARIANT" == "1" ]]; then
+  echo "NOTE: the calibration-only UI requires a smartfox image that supports"
+  echo "      SMARTFOX_VARIANT. Older images ignore it and show the full UI"
+  echo "      (core is still not started either way)."
+fi
+
 ###### CLEAN FILES CRON JOB ######
 ### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
 # Installed before the deploy on purpose: with `set -e` a slow or failed
@@ -570,8 +614,13 @@ export SMARTFOX_VERSION="$DOCKER_VERSION"
 echo "Pulling Docker images (SMARTFOX_VERSION=$SMARTFOX_VERSION)"
 sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
 
-echo "Starting SmartFox"
-sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
+if [[ "$CAL_VARIANT" == "1" ]]; then
+  echo "Starting SmartFox (calibration variant: web + cloudflared only)"
+  sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d web cloudflared
+else
+  echo "Starting SmartFox"
+  sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
+fi
 
 sudo docker logout ghcr.io
 
@@ -588,6 +637,7 @@ echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
 echo ""
 echo "/// Completed ///"
 echo "Mode: $MODE"
+echo "Variant: $VARIANT_VALUE"
 echo "Deployed version: $RESOLVED_VERSION"
 echo "Pinned image tag: $DOCKER_VERSION (SMARTFOX_VERSION in /opt/smartfox/.env)"
 echo "If this was a fresh install, please reboot the system."
