@@ -49,13 +49,13 @@ The variant of the station is decided by the presence of `--cal` on **each** ins
 | `--install --cal --version=vX.Y.Z` | Fresh calibration bench |
 | `--update --cal --version=vX.Y.Z` | Update a bench unit, staying in calibration mode |
 | `--update --version=vX.Y.Z` (no `--cal`) | **Promote a bench to production**: full UI, all services started |
-| `--update --cal` on a production station | Demote to calibration mode (stops the monitoring pipeline) |
+| `--update --cal` on a production station | Demote to calibration mode: removes all pipeline containers, deletes the recording auto-start flag, and disables the host watchdog if one was installed |
 
 Notes:
 
 - The flag writes `SMARTFOX_VARIANT=cal` (or `full`) into `/opt/smartfox/.env`. Never add this key to the app repo's `.env.template`.
 - The calibration factor saved during the cal stage (`/opt/smartfox/config/cal_factor.txt`) **survives promotion automatically** — `config/*.txt` files are only seeded when absent.
-- The calibration-only UI requires a Smartfox image that supports `SMARTFOX_VARIANT` (first release: _fill in tag when released_). Older images ignore the flag and show the full UI; `core` is still not started either way.
+- The calibration-only UI requires a Smartfox image that supports `SMARTFOX_VARIANT` (first release: _fill in tag when released_). Older images ignore the flag and show the full UI; `core` is still not started either way. To check whether a deployed image supports it: `GET /api/status/version` returns a `"variant"` field on supporting images.
 - On a cal install, only `TUNNEL_TOKEN` is functionally required among the secret prompts (the web UI is reached through the Cloudflare tunnel). Placeholder values are acceptable for `XIMILAR_TOKEN` and `DROPBOX_TOKEN`; set the real values in `/opt/smartfox/.env` before promoting to production — `--update` never rewrites existing values.
 - Never install the host service monitor (watchdog) on a cal unit: with no `core` container it escalates restarts up to a reboot loop.
 - If you run Compose by hand on a cal unit, always name the services: `sudo docker compose up -d web cloudflared`.

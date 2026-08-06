@@ -616,6 +616,18 @@ sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
 
 if [[ "$CAL_VARIANT" == "1" ]]; then
   echo "Starting SmartFox (calibration variant: web + cloudflared only)"
+  # A calibration bench must not run the monitoring pipeline. Enforce that
+  # regardless of what ran on this host before:
+  # - remove any leftover containers from a previous full deployment
+  #   (install mode has no global `down`, and core is restart=unless-stopped),
+  # - disarm the recording auto-start flag (this is the real flag name;
+  #   start_smartfox.sh starts the pipeline whenever it exists),
+  # - disable the host watchdog if a dev-track install left one: with no
+  #   smartfox-core container it escalates docker/daemon restarts up to a
+  #   reboot loop.
+  (sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose down) || true
+  sudo rm -f /var/lib/smartfox/.smartfox_enabled
+  sudo systemctl disable --now smartfox-svc-monitor.timer smartfox-svc-monitor.service 2>/dev/null || true
   sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d web cloudflared
 else
   echo "Starting SmartFox"
