@@ -182,7 +182,10 @@ fi
 
 if [[ "$MODE" == "update" ]]; then
   echo "Update mode: stopping containers"
-  sudo systemctl stop smartfox-monitor.timer 2>/dev/null || true
+  # Stop the timer AND any in-flight oneshot run: the watchdog escalates to
+  # `docker restart` / `systemctl restart docker` / reboot, and would otherwise
+  # fight the `compose down` below. Re-enabled by the SERVICE MONITOR block.
+  sudo systemctl stop smartfox-svc-monitor.timer smartfox-svc-monitor.service 2>/dev/null || true
   if [[ -f /opt/smartfox/docker-compose.yml ]]; then
     (cd /opt/smartfox && sudo docker compose down) || true
     (sudo rm -f /var/lib/smartfox/.smartfox_enabled)
@@ -519,6 +522,44 @@ if [[ "$MERGE_ENV" == "1" ]]; then
   done < .env.template
 fi
 
+####### PIN DEPLOYED VERSION FOR COMPOSE #######
+# docker compose interpolates ${SMARTFOX_VERSION} from /opt/smartfox/.env when
+# the variable is not set in the caller's environment - the same mechanism the
+# cloudflared service already relies on for TUNNEL_TOKEN. Recording the deployed
+# tag here means the nightly maintenance cron job, and any manual
+# `docker compose` call on the device, resolves to the image that is already on
+# disk instead of falling back to :latest and pulling it over the station link.
+#
+# Do NOT add SMARTFOX_VERSION to the app repo's .env.template: --merge-env would
+# then seed it on every device.
+
+echo ""
+echo "Pinning deployed version in $ENV_FILE (SMARTFOX_VERSION=$DOCKER_VERSION)"
+if sudo grep -q '^SMARTFOX_VERSION=' "$ENV_FILE"; then
+  sudo sed -i "s|^SMARTFOX_VERSION=.*|SMARTFOX_VERSION=$DOCKER_VERSION|" "$ENV_FILE"
+else
+  echo "SMARTFOX_VERSION=$DOCKER_VERSION" | sudo tee -a "$ENV_FILE" >/dev/null
+fi
+
+###### CLEAN FILES CRON JOB ######
+### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
+# Installed before the deploy on purpose: with `set -e` a slow or failed
+# `compose pull` aborts the run, and this job must not be what gets skipped -
+# without it the data volume fills up and recording stops.
+# The job inherits SMARTFOX_VERSION from /opt/smartfox/.env, so it reuses the
+# deployed image instead of pulling :latest.
+echo ""
+echo "Setting Cleanup (clean_files) Cron Job"
+CRON_LINE="0 0 * * * /bin/bash -lc 'install -d -o 1000 -g 1000 /var/lib/smartfox/logs/internal && cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
+if sudo crontab -l 2>/dev/null | grep -qF "docker compose run --rm maintenance"; then
+  echo "Cleanup cron job already present."
+elif (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -; then
+  echo "Cleanup cron job installed."
+else
+  echo "WARNING: could not install the cleanup cron job. Add it with 'sudo crontab -e':"
+  echo "  $CRON_LINE"
+fi
+
 ####### REMOVE MONITOR AUTO-START ########
 
 echo ""
@@ -553,19 +594,11 @@ else
 fi
 echo "$RESOLVED_VERSION" | sudo tee /opt/smartfox/.version >/dev/null
 
-###### CLEAN FILES CRON JOB. 
-### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
-echo ""
-echo "Setting Cleanup (clean_files) Cron Job"
-CRON_LINE="0 0 * * * /bin/bash -lc 'cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
-if ! sudo crontab -l 2>/dev/null | grep -qF "docker compose run --rm maintenance"; then
-    (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -
-fi
-
 ######## END MESSAGE ########
 
 echo ""
 echo "/// Completed ///"
 echo "Mode: $MODE"
 echo "Deployed version: $RESOLVED_VERSION"
+echo "Pinned image tag: $DOCKER_VERSION (SMARTFOX_VERSION in /opt/smartfox/.env)"
 echo "If this was a fresh install, please reboot the system."
