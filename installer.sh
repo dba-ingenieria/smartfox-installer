@@ -198,9 +198,14 @@ fi
 
 if [[ "$MODE" == "update" ]]; then
   echo "Update mode: stopping containers"
+  # Stop the timer AND any in-flight oneshot run: the watchdog escalates to
+  # `docker restart` / `systemctl restart docker` / reboot, and would otherwise
+  # fight the `compose down` below. Re-enabled by the SERVICE MONITOR block
+  # when the checked-out version ships it, or restarted at the end otherwise.
+  sudo systemctl stop smartfox-svc-monitor.timer smartfox-svc-monitor.service 2>/dev/null || true
   if [[ -f /opt/smartfox/docker-compose.yml ]]; then
     (cd /opt/smartfox && sudo docker compose down) || true
-    (sudo rm -f /var/lib/smartfox/.monitor_enabled)
+    (sudo rm -f /var/lib/smartfox/.smartfox_enabled)
   fi
 fi
 
@@ -395,6 +400,36 @@ fi
 if [ "$MODE" = "update" ]; then
   configure_reboot_trigger
 fi
+
+####### SERVICE MONITOR (version-dependent) ########
+# The host watchdog ships in the app repo under setup/monitor/ from a certain
+# point onward (present on the dev and main branches, absent in v2.2.0 and
+# older tags). Install its files only when the checked-out version actually
+# provides them — that way a release that includes the watchdog rolls it out
+# on the next update with no installer change. Never on a calibration bench:
+# with no smartfox-core container the watchdog escalates docker/daemon
+# restarts up to a reboot loop.
+# The timer is NOT enabled here: it would fire during the down/pull/up window
+# against missing containers and can escalate to a docker-daemon restart
+# mid-pull. It is enabled/started after `docker compose up` in the deploy step.
+# (cwd is the app repo checkout here, so the relative path is the versioned one.)
+
+MONITOR_AVAILABLE=0
+if [[ "$CAL_VARIANT" == "1" ]]; then
+  echo "Skipping service monitor (calibration variant)"
+elif [[ -f setup/monitor/smartfox-svc-monitor.py ]]; then
+  echo ""
+  echo "Installing Smartfox-Pi Service Monitor files (shipped by $GIT_VERSION)"
+  sudo install -m 0755 setup/monitor/smartfox-svc-monitor.py /usr/local/bin/smartfox-svc-monitor.py
+  sudo install -m 0644 setup/monitor/smartfox-svc-monitor.service /etc/systemd/system/smartfox-svc-monitor.service
+  sudo install -m 0644 setup/monitor/smartfox-svc-monitor.timer /etc/systemd/system/smartfox-svc-monitor.timer
+  sudo mkdir -p /var/lib/smartfox-svc-monitor
+  sudo systemctl daemon-reload
+  MONITOR_AVAILABLE=1
+else
+  echo "Service monitor not shipped by $GIT_VERSION — skipping"
+fi
+
 ####### RESET CONFIG (if requested) #######
 
 if [[ "$RESET_CONFIG" == "1" ]]; then
@@ -595,7 +630,10 @@ fi
 
 echo ""
 echo "Removing monitor auto-start"
-sudo rm -f /var/lib/smartfox/.monitor_enabled
+# The real flag name is .smartfox_enabled (paths.yml utils.flag). The old
+# .monitor_enabled name was stale and its removal a silent no-op, which made
+# stations auto-resume recording after updates against the documented intent.
+sudo rm -f /var/lib/smartfox/.smartfox_enabled
 
 sudo touch /opt/smartfox/.version
 
@@ -632,6 +670,17 @@ if [[ "$CAL_VARIANT" == "1" ]]; then
 else
   echo "Starting SmartFox"
   sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
+
+  # Watchdog goes live only now that the containers exist (see the SERVICE
+  # MONITOR block). If this version does not ship it but a previous install
+  # left an enabled one, put it back the way the update-mode pre-stop found
+  # it (a cal-demoted unit has it disabled and stays that way).
+  if [[ "$MONITOR_AVAILABLE" == "1" ]]; then
+    echo "Enabling Smartfox-Pi Service Monitor"
+    sudo systemctl enable --now smartfox-svc-monitor.timer
+  elif systemctl is-enabled smartfox-svc-monitor.timer >/dev/null 2>&1; then
+    sudo systemctl start smartfox-svc-monitor.timer 2>/dev/null || true
+  fi
 fi
 
 sudo docker logout ghcr.io

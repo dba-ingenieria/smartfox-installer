@@ -16,6 +16,8 @@ To download helper tools such as disable-camera-mic (for Debian 12 Bookworm devi
 
 `curl -O https://raw.githubusercontent.com/dba-ingenieria/smartfox-installer/main/helpers/disable-camera-mic.sh`
 
+> **Note:** `installer.sh` is the single installer for **all** tracks (release tags, `dev`, `latest`, and `--cal` benches). The former `installer-dev.sh` is deprecated and only prints an error: the host service monitor (watchdog) it used to add is now installed automatically whenever the selected version ships it (`setup/monitor/` exists on `dev` and `main`, but not in `v2.2.0` or older tags), and is never installed on `--cal` benches.
+
 ## Modes
 
 The installer provides two modes:
