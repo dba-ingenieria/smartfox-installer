@@ -616,10 +616,25 @@ fi
 # deployed image instead of pulling :latest.
 echo ""
 echo "Setting Cleanup (clean_files) Cron Job"
-CRON_LINE="0 0 * * * /bin/bash -lc 'install -d -o 1000 -g 1000 /var/lib/smartfox/logs/internal && cd /opt/smartfox && sudo docker compose run --rm maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
-if sudo crontab -l 2>/dev/null | grep -qF "docker compose run --rm maintenance"; then
+# `--pull never` turns a missing/wrong version pin into a loud failure in the
+# log instead of an accidental full-image download over the station link at
+# midnight. Compose plugins older than v2.18 lack the flag on `run`; those
+# fall back to relying on the pin alone.
+if sudo docker compose run --help 2>/dev/null | grep -qE '^\s*--pull '; then
+  MAINT_RUN_FLAGS="--rm --pull never"
+else
+  MAINT_RUN_FLAGS="--rm"
+fi
+CRON_LINE="0 0 * * * /bin/bash -lc 'install -d -o 1000 -g 1000 /var/lib/smartfox/logs/internal && cd /opt/smartfox && sudo docker compose run $MAINT_RUN_FLAGS maintenance >> /var/lib/smartfox/logs/internal/clean_files.log.\$(date +\%F) 2>&1'"
+# Replace-not-append: any existing maintenance line (older canonical form or a
+# hand-edited variant) is removed before the standard line is added, so a
+# diverged station converges instead of ending up with two jobs at midnight.
+# helpers/fix-maintenance-cron.sh applies this same normalization fleet-wide.
+CURRENT_CRON="$(sudo crontab -l 2>/dev/null || true)"
+DESIRED_CRON="$({ printf '%s\n' "$CURRENT_CRON" | grep -vE 'docker compose run.*maintenance' || true; echo "$CRON_LINE"; } | sed '/^[[:space:]]*$/d')"
+if [[ "$(printf '%s\n' "$CURRENT_CRON" | sed '/^[[:space:]]*$/d')" == "$DESIRED_CRON" ]]; then
   echo "Cleanup cron job already present."
-elif (sudo crontab -l 2>/dev/null; echo "$CRON_LINE") | sudo crontab -; then
+elif printf '%s\n' "$DESIRED_CRON" | sudo crontab -; then
   echo "Cleanup cron job installed."
 else
   echo "WARNING: could not install the cleanup cron job. Add it with 'sudo crontab -e':"

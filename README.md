@@ -16,6 +16,16 @@ To download helper tools such as disable-camera-mic (for Debian 12 Bookworm devi
 
 `curl -O https://raw.githubusercontent.com/dba-ingenieria/smartfox-installer/main/helpers/disable-camera-mic.sh`
 
+#### fix-maintenance-cron
+
+Standardizes the nightly `clean_files` maintenance cron job on an already-installed station. Use it on any station whose cron line was hand-edited, is missing, or fails with `No such image: ...smartfox-core:latest` in `clean_files.log`. It detects the version already deployed on the device (core container → web container → `.env` pin → local images), pins `SMARTFOX_VERSION` in `/opt/smartfox/.env` to it, replaces every existing maintenance cron line with the standard one, and verifies the job resolves to an image on disk. It never pulls an image and never restarts anything, so it is safe on a recording station.
+
+`curl -O https://raw.githubusercontent.com/dba-ingenieria/smartfox-installer/main/helpers/fix-maintenance-cron.sh`
+
+`bash fix-maintenance-cron.sh` — fix pin + cron, then verify
+
+`bash fix-maintenance-cron.sh --run-now` — additionally run the cleanup once immediately and show the log tail
+
 > **Note:** `installer.sh` is the single installer for **all** tracks (release tags, `dev`, `latest`, and `--cal` benches). The former `installer-dev.sh` is deprecated and only prints an error: the host service monitor (watchdog) it used to add is now installed automatically whenever the selected version ships it (`setup/monitor/` exists on `dev` and `main`, but not in `v2.2.0` or older tags), and is never installed on `--cal` benches.
 
 ## Modes
