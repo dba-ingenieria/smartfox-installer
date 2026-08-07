@@ -42,7 +42,7 @@ If no `--version` flag is provided, the latest version will be installed by defa
 
 ### Variant flag (calibration bench)
 
-- `--cal`: Provisions a **calibration bench** unit (e.g. for calibration at the ISP). The host is fully provisioned exactly like a production station and **both** images are pulled at the pinned version, but only the `web` and `cloudflared` containers are started, and the web UI hides the station-operation menus ("Configuración general de la estación", "Configuración de servicios", "Estado de los servicios"), leaving only the calibration workflow.
+- `--cal`: Provisions a **calibration bench** unit (e.g. for calibration at the ISP). The host is fully provisioned exactly like a production station and **both** images are pulled at the pinned version, but only the `web` and `cloudflared` containers are started, and the web UI hides the service-configuration and service-status menus while reducing "Configuración general de la estación" to just the station-ID field — the operator sets the ID per unit and it is stamped into each calibration report and its download filename.
 
 The variant of the station is decided by the presence of `--cal` on **each** installer run:
 
