@@ -607,6 +607,37 @@ if [[ "$CAL_VARIANT" == "1" ]]; then
   echo "      (core is still not started either way)."
 fi
 
+####### CAL ADMIN TOKEN #######
+# Cal slots are public (no Cloudflare Access): the web app gates state-changing
+# actions behind SMARTFOX_ADMIN_TOKEN (admin URL /?admin=<token>, REST header
+# X-Admin-Token). Prompt only when the key is missing, empty, or a placeholder
+# so reruns keep the existing value. Never add this key to the app repo's
+# .env.template (--merge-env would seed it empty fleet-wide). Token charset:
+# letters, digits, - and _ only (it is substituted with sed and used in a URL).
+
+if [[ "$CAL_VARIANT" == "1" ]]; then
+  CURRENT_ADMIN_TOKEN=$(sudo grep -E '^SMARTFOX_ADMIN_TOKEN=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)
+  if [[ -z "$CURRENT_ADMIN_TOKEN" || "$CURRENT_ADMIN_TOKEN" == "PLACEHOLDER" ]]; then
+    echo ""
+    read -s -p "SmartFox Admin Token (letters/digits/-/_ ; enables /?admin=<token> on the bench): " SMARTFOX_ADMIN_TOKEN
+    echo ""
+    if [[ -z "$SMARTFOX_ADMIN_TOKEN" ]]; then
+      echo "WARNING: empty admin token - admin mode will never activate on this bench."
+    elif [[ ! "$SMARTFOX_ADMIN_TOKEN" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "ERROR: admin token may only contain letters, digits, - and _"
+      exit 1
+    fi
+    if sudo grep -q '^SMARTFOX_ADMIN_TOKEN=' "$ENV_FILE"; then
+      sudo sed -i "s|^SMARTFOX_ADMIN_TOKEN=.*|SMARTFOX_ADMIN_TOKEN=$SMARTFOX_ADMIN_TOKEN|" "$ENV_FILE"
+    else
+      echo "SMARTFOX_ADMIN_TOKEN=$SMARTFOX_ADMIN_TOKEN" | sudo tee -a "$ENV_FILE" >/dev/null
+    fi
+    unset SMARTFOX_ADMIN_TOKEN
+  else
+    echo "Admin token already present in $ENV_FILE (kept)."
+  fi
+fi
+
 ###### CLEAN FILES CRON JOB ######
 ### IF MORE MODES ARE ADDED, SET A CONDITION TO RUN
 # Installed before the deploy on purpose: with `set -e` a slow or failed

@@ -52,7 +52,7 @@ If no `--version` flag is provided, the latest version will be installed by defa
 
 ### Variant flag (calibration bench)
 
-- `--cal`: Provisions a **calibration bench** unit (e.g. for calibration at the ISP). The host is fully provisioned exactly like a production station and **both** images are pulled at the pinned version, but only the `web` and `cloudflared` containers are started, and the web UI hides the service-configuration and service-status menus while reducing "Configuración general de la estación" to just the station-ID field — the operator sets the ID per unit and it is stamped into each calibration report and its download filename.
+- `--cal`: Provisions a **calibration bench** unit (e.g. for calibration at the ISP). The host is fully provisioned exactly like a production station and **both** images are pulled at the pinned version, but only the `web` and `cloudflared` containers are started, and the web UI hides the service-configuration and service-status menus while reducing "Configuración general de la estación" to the station-ID and Modelo fields — an admin sets them per unit and they are stamped into each calibration report (the ID also names the download file). Because cal benches are reachable on **public hostnames without Cloudflare Access**, cal mode enforces an Admin/User split server-side: anonymous users can only measure, save the calibration factor, download the report, and select the recording device; everything else requires the admin token below.
 
 The variant of the station is decided by the presence of `--cal` on **each** installer run:
 
@@ -66,11 +66,22 @@ The variant of the station is decided by the presence of `--cal` on **each** ins
 Notes:
 
 - The flag writes `SMARTFOX_VARIANT=cal` (or `full`) into `/opt/smartfox/.env`. Never add this key to the app repo's `.env.template`.
+- `--cal` also prompts for `SMARTFOX_ADMIN_TOKEN` when the key is missing, empty, or `PLACEHOLDER` (reruns keep the existing value; promotion leaves it in place — the full variant ignores it). Charset: letters, digits, `-` and `_` only. Admin mode is activated at `https://calNN.smartfoxconfig.ai/?admin=<token>`; REST admin calls send the `X-Admin-Token: <token>` header. An empty token means admin mode can never activate on that bench. Never add this key to `.env.template` either.
 - The calibration factor saved during the cal stage (`/opt/smartfox/config/cal_factor.txt`) **survives promotion automatically** — `config/*.txt` files are only seeded when absent.
 - The calibration-only UI requires a Smartfox image that supports `SMARTFOX_VARIANT` (first release: _fill in tag when released_). Older images ignore the flag and show the full UI; `core` is still not started either way. To check whether a deployed image supports it: `GET /api/status/version` returns a `"variant"` field on supporting images.
 - On a cal install, only `TUNNEL_TOKEN` is functionally required among the secret prompts (the web UI is reached through the Cloudflare tunnel). Placeholder values are acceptable for `XIMILAR_TOKEN` and `DROPBOX_TOKEN`; set the real values in `/opt/smartfox/.env` before promoting to production — `--update` never rewrites existing values.
 - Never install the host service monitor (watchdog) on a cal unit: with no `core` container it escalates restarts up to a reboot loop.
 - If you run Compose by hand on a cal unit, always name the services: `sudo docker compose up -d web cloudflared`.
+
+### Cal slot (Cloudflare) runbook
+
+Cal benches are published at generic slots `cal01.smartfoxconfig.ai`, `cal02…`, reusable for any bench unit:
+
+1. Create the tunnel (`cloudflared tunnel create calNN` or via the Zero Trust dashboard) and route the DNS hostname `calNN.smartfoxconfig.ai` to it, pointing at `http://web:8000`.
+2. **Do NOT create a Cloudflare Access application for the hostname.** The slot is public by design (the ISP operator has no credentials); the web app enforces the admin split server-side.
+3. Put the tunnel's token into the bench's `/opt/smartfox/.env` as `TUNNEL_TOKEN` (the installer prompts for it on `--install`).
+4. **Warning: never point a public cal slot at a full (non-cal) station.** The server-side hardening only activates with `SMARTFOX_VARIANT=cal`; a full station on a no-Access hostname exposes unauthenticated config writes and reboot.
+5. Admin usage: `https://calNN.smartfoxconfig.ai/?admin=<SMARTFOX_ADMIN_TOKEN>` in the browser, or `X-Admin-Token: <token>` for REST. Rotate the token by editing `/opt/smartfox/.env` and running `sudo docker compose up -d web`.
 
 ### Config Flags
 
