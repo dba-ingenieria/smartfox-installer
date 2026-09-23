@@ -32,6 +32,14 @@ set -e
 #
 # Version:
 #   --version=latest (default) or --version=v2.0.0-beta.3 or --version=2.0.0-beta.3
+#
+# Fleet agent (app versions that ship setup/agent/, v2.3.0+):
+#   The installer also installs the fleet update agent and cosign, and
+#   prompts once for the station's fleet token (/etc/smartfox/agent.env).
+#   From then on updates are applied unattended by the agent inside the
+#   station's maintenance window; this script is the one-time host bootstrap
+#   and the last manual update. The recording enable flag is left in place
+#   across updates (auto-resume) — only --cal removes it.
 ############################################
 
 ########### MODE + VERSION PARSER ###########
@@ -72,6 +80,12 @@ esac
 echo "Mode: $MODE"
 echo "Version: $SMARTFOX_VERSION"
 echo "Flags: reset-env=$RESET_ENV merge-env=$MERGE_ENV reset-config=$RESET_CONFIG cal=$CAL_VARIANT"
+
+# Fleet agent bootstrap constants (FLEET AGENT block). cosign stays on the
+# v2 line: it is what CI signs with, and v3 changed the bundle format.
+FLEET_URL="https://fleet.smartfoxconfig.ai"
+COSIGN_VERSION="v2.6.5"
+COSIGN_SHA256="426193b4c5da4d4d643e822f48fe0cc8a476ca1782a272704831f5a0cef716d7"   # cosign-linux-arm64
 
 # Keep your version parsing behavior
 GIT_VERSION="$SMARTFOX_VERSION"
@@ -203,9 +217,13 @@ if [[ "$MODE" == "update" ]]; then
   # fight the `compose down` below. Re-enabled by the SERVICE MONITOR block
   # when the checked-out version ships it, or restarted at the end otherwise.
   sudo systemctl stop smartfox-svc-monitor.timer smartfox-svc-monitor.service 2>/dev/null || true
+  # Same for the fleet agent: an apply in flight must not race this update.
+  sudo systemctl stop smartfox-agent.timer smartfox-agent.service 2>/dev/null || true
   if [[ -f /opt/smartfox/docker-compose.yml ]]; then
     (cd /opt/smartfox && sudo docker compose down) || true
-    (sudo rm -f /var/lib/smartfox/.smartfox_enabled)
+    # The recording enable flag is deliberately kept: start_smartfox.sh
+    # resumes the pipeline with the new containers (auto-resume, the same
+    # policy the fleet agent applies). --cal removes it further down.
   fi
 fi
 
@@ -428,6 +446,59 @@ elif [[ -f setup/monitor/smartfox-svc-monitor.py ]]; then
   MONITOR_AVAILABLE=1
 else
   echo "Service monitor not shipped by $GIT_VERSION — skipping"
+fi
+
+####### FLEET AGENT (version-dependent) ########
+# The fleet update agent ships in the app repo under setup/agent/ (v2.3.0+).
+# Like the monitor, install it only when the checked-out version provides it;
+# unlike the monitor, also on --cal benches (the agent handles the variant).
+# The station's fleet token lives in /etc/smartfox/agent.env (root-only —
+# never in /opt/smartfox/.env, which is env_file for every container) and is
+# prompted once. cosign (pinned + checksum) lets the agent verify image
+# signatures; without it the agent refuses updates that require verification.
+# The timer is enabled after `docker compose up`, like the monitor's.
+
+AGENT_AVAILABLE=0
+if [[ -f setup/agent/smartfox_agent.py ]]; then
+  echo ""
+  echo "Installing SmartFox fleet agent files (shipped by $GIT_VERSION)"
+  sudo install -m 0755 setup/agent/smartfox_agent.py /usr/local/bin/smartfox_agent.py
+  sudo install -m 0644 setup/agent/smartfox-agent.service /etc/systemd/system/smartfox-agent.service
+  sudo install -m 0644 setup/agent/smartfox-agent.timer /etc/systemd/system/smartfox-agent.timer
+  sudo mkdir -p /etc/smartfox /opt/smartfox/state /opt/smartfox/dist
+  sudo chown "$INSTALL_USER:$INSTALL_USER" /opt/smartfox/state /opt/smartfox/dist
+  sudo systemctl daemon-reload
+
+  if ! sudo grep -qsE '^FLEET_TOKEN=.+' /etc/smartfox/agent.env; then
+    echo ""
+    read -s -p "Fleet token (per-station, from the smartfox-fleet inventory; empty = agent stays idle): " FLEET_TOKEN
+    echo ""
+    if [[ -n "$FLEET_TOKEN" && ! "$FLEET_TOKEN" =~ ^[A-Za-z0-9_-]+$ ]]; then
+      echo "ERROR: fleet token may only contain letters, digits, - and _"
+      exit 1
+    fi
+    printf 'FLEET_URL=%s\nFLEET_TOKEN=%s\n' "$FLEET_URL" "$FLEET_TOKEN" | sudo tee /etc/smartfox/agent.env >/dev/null
+    sudo chmod 600 /etc/smartfox/agent.env
+    unset FLEET_TOKEN
+  else
+    echo "Fleet token already present in /etc/smartfox/agent.env (kept)."
+  fi
+
+  if ! command -v cosign >/dev/null 2>&1; then
+    echo "Installing cosign $COSIGN_VERSION"
+    COSIGN_TMP=$(mktemp)
+    if curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-arm64" -o "$COSIGN_TMP" \
+       && echo "${COSIGN_SHA256}  ${COSIGN_TMP}" | sha256sum -c --quiet; then
+      sudo install -m 0755 "$COSIGN_TMP" /usr/local/bin/cosign
+      sudo cosign initialize >/dev/null 2>&1 || echo "WARNING: cosign initialize failed (no network?); the agent retries at verify time"
+    else
+      echo "WARNING: cosign download or checksum failed; the agent will refuse updates that require verification until cosign is installed"
+    fi
+    rm -f "$COSIGN_TMP"
+  fi
+  AGENT_AVAILABLE=1
+else
+  echo "Fleet agent not shipped by $GIT_VERSION — skipping"
 fi
 
 ####### RESET CONFIG (if requested) #######
@@ -672,15 +743,12 @@ else
   echo "  $CRON_LINE"
 fi
 
-####### REMOVE MONITOR AUTO-START ########
-
-echo ""
-echo "Removing monitor auto-start"
-# The real flag name is .smartfox_enabled (paths.yml utils.flag). The old
-# .monitor_enabled name was stale and its removal a silent no-op, which made
-# stations auto-resume recording after updates against the documented intent.
-sudo rm -f /var/lib/smartfox/.smartfox_enabled
-
+####### STATE FILES ########
+# The recording enable flag (/var/lib/smartfox/.smartfox_enabled) is left in
+# place on purpose: start_smartfox.sh resumes the pipeline with the new
+# containers (auto-resume — the fleet agent applies the same policy). --cal
+# removes it below. .version is the legacy stamp read by images older than
+# v2.3.0; newer images read /opt/smartfox/state/state.json.
 sudo touch /opt/smartfox/.version
 
 ####### GHCR LOGIN #######
@@ -729,6 +797,20 @@ else
   fi
 fi
 
+####### FLEET AGENT STATE + TIMER #######
+if [[ "$AGENT_AVAILABLE" == "1" ]]; then
+  printf '{"agent": 1, "deployed": "%s", "last_result": "installer", "applied_at": "%s"}\n' \
+    "$DOCKER_VERSION" "$(date -Iseconds)" | sudo tee /opt/smartfox/state/state.json >/dev/null
+  sudo chown "$INSTALL_USER:$INSTALL_USER" /opt/smartfox/state/state.json
+  # A pause left behind by an interrupted agent apply must not keep the
+  # watchdog asleep; a hand-made (empty) pause file is kept.
+  if sudo grep -qs '^agent' /var/lib/smartfox-svc-monitor/maintenance; then
+    sudo rm -f /var/lib/smartfox-svc-monitor/maintenance
+  fi
+  echo "Enabling SmartFox fleet agent timer"
+  sudo systemctl enable --now smartfox-agent.timer
+fi
+
 sudo docker logout ghcr.io
 
 if [[ "$SMARTFOX_VERSION" == "latest" ]]; then
@@ -747,4 +829,7 @@ echo "Mode: $MODE"
 echo "Variant: $VARIANT_VALUE"
 echo "Deployed version: $RESOLVED_VERSION"
 echo "Pinned image tag: $DOCKER_VERSION (SMARTFOX_VERSION in /opt/smartfox/.env)"
+if [[ "$AGENT_AVAILABLE" == "1" ]]; then
+  echo "Fleet agent: enabled (state in /opt/smartfox/state/state.json; further updates are applied by the agent)"
+fi
 echo "If this was a fresh install, please reboot the system."
