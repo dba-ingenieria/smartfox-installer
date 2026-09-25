@@ -33,7 +33,7 @@ set -e
 # Version:
 #   --version=latest (default) or --version=v2.0.0-beta.3 or --version=2.0.0-beta.3
 #
-# Fleet agent (app versions that ship setup/agent/, v2.3.0+):
+# Fleet agent (app versions that ship setup/agent/, v3.0.0+):
 #   The installer also installs the fleet update agent and cosign, and
 #   prompts once for the station's fleet token (/etc/smartfox/agent.env).
 #   From then on updates are applied unattended by the agent inside the
@@ -449,7 +449,7 @@ else
 fi
 
 ####### FLEET AGENT (version-dependent) ########
-# The fleet update agent ships in the app repo under setup/agent/ (v2.3.0+).
+# The fleet update agent ships in the app repo under setup/agent/ (v3.0.0+).
 # Like the monitor, install it only when the checked-out version provides it;
 # unlike the monitor, also on --cal benches (the agent handles the variant).
 # The station's fleet token lives in /etc/smartfox/agent.env (root-only —
@@ -748,7 +748,7 @@ fi
 # place on purpose: start_smartfox.sh resumes the pipeline with the new
 # containers (auto-resume — the fleet agent applies the same policy). --cal
 # removes it below. .version is the legacy stamp read by images older than
-# v2.3.0; newer images read /opt/smartfox/state/state.json.
+# v3.0.0; newer images read /opt/smartfox/state/state.json.
 sudo touch /opt/smartfox/.version
 
 ####### GHCR LOGIN #######
