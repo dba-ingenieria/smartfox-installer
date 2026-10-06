@@ -95,10 +95,9 @@ DOCKER_VERSION="$SMARTFOX_VERSION"
 if [[ "$GIT_VERSION" != "latest" && "$GIT_VERSION" != "dev" && "$GIT_VERSION" != v* ]]; then
   GIT_VERSION="v${GIT_VERSION}"
 fi
-
-#if [[ "$DOCKER_VERSION" == v* ]]; then
-#  DOCKER_VERSION="${DOCKER_VERSION#v}"
-#fi
+# CI tags the images exactly like the git tag (v3.0.0-rc.19, with the v), so the
+# image tag is the normalized git ref: `--version=3.0.0` used to pull `:3.0.0`.
+DOCKER_VERSION="$GIT_VERSION"
 
 ########### START ###########
 
@@ -249,7 +248,16 @@ fi
 ####### SYSTEM DIRECTORIES (ALL MODES) #######
 
 sudo mkdir -p /opt/smartfox /var/lib/smartfox
-sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox /var/lib/smartfox
+sudo chown -R "$INSTALL_USER:$INSTALL_USER" /opt/smartfox
+if [[ "$MODE" == "install" ]]; then
+  sudo chown -R "$INSTALL_USER:$INSTALL_USER" /var/lib/smartfox
+else
+  # Update mode: the old containers are still recording under /var/lib/smartfox
+  # (since bf3b3eb). A recursive chown over a live tree fails on a file the
+  # pipeline deletes mid-walk, and `set -e` would abort the run with both
+  # timers stopped. The tree already belongs to the user from the install.
+  sudo chown "$INSTALL_USER:$INSTALL_USER" /var/lib/smartfox
+fi
 mkdir -p /opt/smartfox/web
 
 ###### CLONE / FETCH REPO (ALL MODES) ######
@@ -265,7 +273,35 @@ esac
 EOF
 chmod +x "$ASKPASS"
 export GIT_ASKPASS GH_USER GH_TOKEN
-trap 'rm -f "$ASKPASS"' EXIT
+
+# Whatever stops this script (set -e, a bad token, Ctrl-C) must not leave the
+# station worse than it found it: the GHCR login out of /root/.docker, the
+# version pin on a tag that is not on disk (the nightly `--pull never` cleanup
+# then fails every night), and the watchdog + agent timers stopped (update
+# mode pauses them first thing).
+PREV_PIN=""   # SMARTFOX_VERSION before this run; restored unless the new images were pulled
+PULLED=0
+DONE=0
+cleanup() {
+  rm -f "$ASKPASS"
+  [[ "$DONE" == "1" ]] && return 0
+  echo ""
+  echo "Installer did not complete."
+  sudo docker logout ghcr.io >/dev/null 2>&1 || true
+  if [[ "$MODE" == "update" ]]; then
+    if [[ "$PULLED" != "1" && -n "$PREV_PIN" && -f /opt/smartfox/.env ]]; then
+      sudo sed -i "s|^SMARTFOX_VERSION=.*|SMARTFOX_VERSION=$PREV_PIN|" /opt/smartfox/.env
+      echo "SMARTFOX_VERSION restored to $PREV_PIN (the new images were not downloaded)."
+    fi
+    for t in smartfox-svc-monitor.timer smartfox-agent.timer; do
+      if systemctl is-enabled "$t" >/dev/null 2>&1; then
+        sudo systemctl start "$t" 2>/dev/null || true
+      fi
+    done
+    echo "Watchdog and agent timers started again where enabled. Re-run the installer (downloaded layers are kept)."
+  fi
+}
+trap cleanup EXIT
 
 cd "$INSTALL_HOME"
 
@@ -653,6 +689,7 @@ fi
 
 echo ""
 echo "Pinning deployed version in $ENV_FILE (SMARTFOX_VERSION=$DOCKER_VERSION)"
+PREV_PIN=$(sudo grep -s '^SMARTFOX_VERSION=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)
 if sudo grep -q '^SMARTFOX_VERSION=' "$ENV_FILE"; then
   sudo sed -i "s|^SMARTFOX_VERSION=.*|SMARTFOX_VERSION=$DOCKER_VERSION|" "$ENV_FILE"
 else
@@ -782,12 +819,21 @@ if ! sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull; then
     RUNNING_IMAGE=$(sudo docker inspect --format '{{.Config.Image}}' "$(sudo docker compose ps -q core)" 2>/dev/null || true)
     if [[ -n "$RUNNING_IMAGE" ]]; then
       sudo sed -i "s|^SMARTFOX_VERSION=.*|SMARTFOX_VERSION=${RUNNING_IMAGE##*:}|" /opt/smartfox/.env
+      PREV_PIN=""   # the running tag is the better pin; cleanup() leaves it alone
     fi
     echo "The old version is still recording (pin: ${RUNNING_IMAGE##*:}). Watchdog and agent timers"
     echo "stay stopped until this installer completes: re-run it (downloaded layers are kept)."
   fi
   sudo docker logout ghcr.io >/dev/null 2>&1 || true
   exit 1
+fi
+PULLED=1
+
+# The tag the station ran until now: the agent keeps it on disk as `previous`
+# (its rollback) and prunes everything else after its first successful apply.
+PREV_TAG=""
+if [[ "$MODE" == "update" ]]; then
+  PREV_TAG=$(sudo docker inspect --format '{{.Config.Image}}' "$(sudo docker compose ps -q core 2>/dev/null)" 2>/dev/null | sed 's/.*://' || true)
 fi
 
 ####### STOP OLD CONTAINERS (update mode) #######
@@ -818,7 +864,10 @@ if [[ "$CAL_VARIANT" == "1" ]]; then
   sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d web cloudflared
 else
   echo "Starting SmartFox"
-  sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d
+  # Named services, like the agent: a bare `up -d` also creates the one-shot
+  # `maintenance` container (one cleanup run now, and an exited container that
+  # pins its image).
+  sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose up -d core web cloudflared
 
   # Watchdog goes live only now that the containers exist (see the SERVICE
   # MONITOR block). If this version does not ship it but a previous install
@@ -834,8 +883,12 @@ fi
 
 ####### FLEET AGENT STATE + TIMER #######
 if [[ "$AGENT_AVAILABLE" == "1" ]]; then
-  printf '{"agent": 1, "deployed": "%s", "last_result": "installer", "applied_at": "%s"}\n' \
-    "$DOCKER_VERSION" "$(date -Iseconds)" | sudo tee /opt/smartfox/state/state.json >/dev/null
+  PREV_JSON=""
+  if [[ -n "$PREV_TAG" && "$PREV_TAG" != "$DOCKER_VERSION" ]]; then
+    PREV_JSON=", \"previous\": \"$PREV_TAG\""
+  fi
+  printf '{"agent": 1, "deployed": "%s"%s, "last_result": "installer", "applied_at": "%s"}\n' \
+    "$DOCKER_VERSION" "$PREV_JSON" "$(date -Iseconds)" | sudo tee /opt/smartfox/state/state.json >/dev/null
   sudo chown "$INSTALL_USER:$INSTALL_USER" /opt/smartfox/state/state.json
   # A pause left behind by an interrupted agent apply must not keep the
   # watchdog asleep; a hand-made (empty) pause file is kept.
@@ -867,4 +920,5 @@ echo "Pinned image tag: $DOCKER_VERSION (SMARTFOX_VERSION in /opt/smartfox/.env)
 if [[ "$AGENT_AVAILABLE" == "1" ]]; then
   echo "Fleet agent: enabled (state in /opt/smartfox/state/state.json; further updates are applied by the agent)"
 fi
+DONE=1
 echo "If this was a fresh install, please reboot the system."
