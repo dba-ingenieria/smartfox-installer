@@ -6,8 +6,9 @@ set -e
 #
 # Modes:
 #   --install    : one-time host bootstrap + deploy
-#   --update     : safe redeploy (containers down first), refresh compose/programs,
-#                 merge config YAML (add missing fields only), pull + start selected version
+#   --update     : redeploy: refresh compose/programs, merge config YAML (add missing
+#                 fields only), pull the selected version while the old containers keep
+#                 recording, then stop them and start the new ones (gap = the restart)
 #
 # Env flags:
 #   --merge-env  : add missing keys from repo .env.template into /opt/smartfox/.env
@@ -208,23 +209,23 @@ if [[ "$MODE" == "install" ]]; then
 fi
 
 
-###### UPDATE LOGIC (safe like reinstall: stop containers first) ######
+###### UPDATE LOGIC (containers keep recording until just before the restart) ######
 
 if [[ "$MODE" == "update" ]]; then
-  echo "Update mode: stopping containers"
+  echo "Update mode: pausing the watchdog and the fleet agent (containers keep running)"
   # Stop the timer AND any in-flight oneshot run: the watchdog escalates to
   # `docker restart` / `systemctl restart docker` / reboot, and would otherwise
-  # fight the `compose down` below. Re-enabled by the SERVICE MONITOR block
-  # when the checked-out version ships it, or restarted at the end otherwise.
+  # fight the image pull and the `compose down` further down (043, 2026-10-06:
+  # `docker ps` timed out during a pull and it restarted the daemon). Re-enabled
+  # by the SERVICE MONITOR block when the checked-out version ships it.
   sudo systemctl stop smartfox-svc-monitor.timer smartfox-svc-monitor.service 2>/dev/null || true
   # Same for the fleet agent: an apply in flight must not race this update.
   sudo systemctl stop smartfox-agent.timer smartfox-agent.service 2>/dev/null || true
-  if [[ -f /opt/smartfox/docker-compose.yml ]]; then
-    (cd /opt/smartfox && sudo docker compose down) || true
-    # The recording enable flag is deliberately kept: start_smartfox.sh
-    # resumes the pipeline with the new containers (auto-resume, the same
-    # policy the fleet agent applies). --cal removes it further down.
-  fi
+  # The old containers are stopped only right before the new ones start (see
+  # "STOP OLD CONTAINERS"): prompts, git fetch, cosign and the image pull all
+  # run while the station records. The recording enable flag is deliberately
+  # kept: start_smartfox.sh resumes the pipeline with the new containers
+  # (auto-resume, the same policy the fleet agent applies). --cal removes it.
   # Stations from before app commit 628538c (e.g. v2.2.0) keep the flag as
   # .monitor_enabled; start_smartfox.sh now reads .smartfox_enabled, so carry
   # it over or the update comes up with recording stopped (station 053,
@@ -772,7 +773,33 @@ cd /opt/smartfox
 export SMARTFOX_VERSION="$DOCKER_VERSION"
 
 echo "Pulling Docker images (SMARTFOX_VERSION=$SMARTFOX_VERSION)"
-sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull
+if ! sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose pull; then
+  echo "ERROR: could not download the $SMARTFOX_VERSION images."
+  if [[ "$MODE" == "update" ]]; then
+    # The old containers are still running and recording. The pin written above
+    # names a tag that is not on disk: point it back at the running image so the
+    # nightly cleanup cron does not pull over the station link.
+    RUNNING_IMAGE=$(sudo docker inspect --format '{{.Config.Image}}' "$(sudo docker compose ps -q core)" 2>/dev/null || true)
+    if [[ -n "$RUNNING_IMAGE" ]]; then
+      sudo sed -i "s|^SMARTFOX_VERSION=.*|SMARTFOX_VERSION=${RUNNING_IMAGE##*:}|" /opt/smartfox/.env
+    fi
+    echo "The old version is still recording (pin: ${RUNNING_IMAGE##*:}). Watchdog and agent timers"
+    echo "stay stopped until this installer completes: re-run it (downloaded layers are kept)."
+  fi
+  sudo docker logout ghcr.io >/dev/null 2>&1 || true
+  exit 1
+fi
+
+####### STOP OLD CONTAINERS (update mode) #######
+# Only now, with every prompt answered and the images on disk: the gap is the
+# restart itself. 043, 2026-10-06, stopping first cost 25 min of recording
+# (git fetch over the site link, a late fleet-token answer, 123 MB of cosign).
+# The new compose file finds the old containers by project/service labels,
+# whatever their names (v2.2.0's smartfox-core-1).
+if [[ "$MODE" == "update" && "$CAL_VARIANT" != "1" ]]; then
+  echo "Update mode: stopping the old containers"
+  (sudo SMARTFOX_VERSION="$SMARTFOX_VERSION" docker compose down --remove-orphans) || true
+fi
 
 if [[ "$CAL_VARIANT" == "1" ]]; then
   echo "Starting SmartFox (calibration variant: web + cloudflared only)"
