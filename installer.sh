@@ -225,6 +225,14 @@ if [[ "$MODE" == "update" ]]; then
     # resumes the pipeline with the new containers (auto-resume, the same
     # policy the fleet agent applies). --cal removes it further down.
   fi
+  # Stations from before app commit 628538c (e.g. v2.2.0) keep the flag as
+  # .monitor_enabled; start_smartfox.sh now reads .smartfox_enabled, so carry
+  # it over or the update comes up with recording stopped (station 053,
+  # 2026-10-06). The old file stays for a rollback to the old version.
+  if [[ -f /var/lib/smartfox/.monitor_enabled && ! -f /var/lib/smartfox/.smartfox_enabled ]]; then
+    echo "Carrying the recording flag over (.monitor_enabled -> .smartfox_enabled)"
+    sudo touch /var/lib/smartfox/.smartfox_enabled
+  fi
 fi
 
 ####### DOCKER WAIT FOR TIME-SET ############
