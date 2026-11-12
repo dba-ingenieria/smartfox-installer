@@ -356,13 +356,19 @@ if [[ "$MODE" == "install" ]]; then
 
   systemctl --user enable pipewire pipewire-pulse wireplumber
   systemctl --user start pipewire pipewire-pulse wireplumber
+fi
 
+######## PERSISTENT BOOT JOURNAL (INSTALL AND UPDATE) ########
+# A drop-in, not journald.conf: Pi OS trixie ships 40-rpi-volatile-storage.conf
+# (Storage=volatile) and drop-ins override the main file.
+JOURNAL_DROPIN=/etc/systemd/journald.conf.d/99-smartfox-persistent.conf
+if [[ ! -f "$JOURNAL_DROPIN" ]]; then
   echo "Enabling persistent boot journal"
-  sudo mkdir -p /var/log/journal
-  sudo sed -i 's/^#\?Storage=.*/Storage=persistent/' /etc/systemd/journald.conf
-  grep -q '^Storage=' /etc/systemd/journald.conf || echo 'Storage=persistent' | sudo tee -a /etc/systemd/journald.conf
+  sudo mkdir -p /var/log/journal "$(dirname "$JOURNAL_DROPIN")"
+  printf '[Journal]\nStorage=persistent\n' | sudo tee "$JOURNAL_DROPIN" >/dev/null
   sudo systemd-tmpfiles --create --prefix /var/log/journal
   sudo systemctl restart systemd-journald
+  sudo journalctl --flush
 fi
 
 ### Disable camera audio with wireplumber
